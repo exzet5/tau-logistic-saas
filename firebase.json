@@ -1,0 +1,36 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "reot-logistic-warehouse",
+          "appId": "1:330591949876:android:0908e0a0368fca4f47a661",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "reot-logistic-warehouse",
+          "configurations": {
+            "android": "1:330591949876:android:0908e0a0368fca4f47a661",
+            "web": "1:330591949876:web:7dd48b8ca1bff38447a661"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

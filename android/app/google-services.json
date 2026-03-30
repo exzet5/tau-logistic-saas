@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "330591949876",
+    "project_id": "reot-logistic-warehouse",
+    "storage_bucket": "reot-logistic-warehouse.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:330591949876:android:0908e0a0368fca4f47a661",
+        "android_client_info": {
+          "package_name": "com.example.myapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7e5KEDnCxTzyCJX2_GHUCELGggDlXmwU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
