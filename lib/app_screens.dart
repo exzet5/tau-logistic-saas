@@ -12,7 +12,7 @@ import 'history_screen.dart';
 import 'dashboard_screen.dart';
 import 'patients_screen.dart';
 import 'pikadon_screen.dart'; 
-
+import 'main.dart';
 // ВНИМАНИЕ: Класс PikadonLogic отсюда УДАЛЕН. 
 // Программа теперь берет его из файла security_service.dart, чтобы не было ошибок компиляции.
 
@@ -76,10 +76,11 @@ class _LoginScreenState extends State<LoginScreen> {
       _generatedCode = (rng.nextInt(900000) + 100000).toString();
 
       await _sendEmailJS(
-        name: _fetchedName!,
-        email: email,
-        code: _generatedCode!
-      );
+      name: _fetchedName!,
+      email: email,
+      code: _generatedCode!,
+      updateLink: LATEST_UPDATE_URL, // Passing the parameter here
+    );
 
       setState(() {
         _isCodeSent = true;
@@ -93,7 +94,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _sendEmailJS({required String name, required String email, required String code}) async {
+  Future<void> _sendEmailJS({
+    required String name, 
+    required String email, 
+    required String code,
+    required String updateLink, // New required parameter
+  }) async {
     final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
       
     final response = await http.post(
@@ -108,7 +114,8 @@ class _LoginScreenState extends State<LoginScreen> {
         'template_params': {
           'to_name': name,
           'to_email': email,
-          'message': code,
+          'message': code,        // Verification code
+          'app_link': updateLink,  // This is your new parameter for the template!
         }
       }),
     );
