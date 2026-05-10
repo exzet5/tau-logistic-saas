@@ -42,6 +42,19 @@ void main() async {
 /// Automatically updates Firestore with the latest version info from this code.
 /// This only succeeds if the current user has write permissions (Authorized staff).
 Future<void> syncAppVersion() async {
+  // Wait until Firebase Auth actually loads the user session
+  // We check for up to 5 seconds
+  for (int i = 0; i < 10; i++) {
+    if (FirebaseAuth.instance.currentUser != null) break;
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    debugPrint("Version sync failed: No authorized user found.");
+    return;
+  }
+
   try {
     final docRef = FirebaseFirestore.instance.collection('app_config').doc('version_info');
     final snapshot = await docRef.get();
@@ -49,17 +62,18 @@ Future<void> syncAppVersion() async {
     if (snapshot.exists) {
       int firestoreVersion = snapshot.data()?['required_version'] ?? 0;
 
-      // Only push update to DB if the code version is newer than DB version
+      // Update ONLY if code version is higher
       if (CURRENT_APP_VERSION > firestoreVersion) {
         await docRef.update({
           'required_version': CURRENT_APP_VERSION,
           'download_url': LATEST_UPDATE_URL,
           'updated_at': FieldValue.serverTimestamp(),
         });
-        debugPrint("Successfully synced version $CURRENT_APP_VERSION to Firestore");
+        debugPrint("SUCCESS: Firestore updated to version $CURRENT_APP_VERSION");
+      } else {
+        debugPrint("Version in DB is already up to date ($firestoreVersion)");
       }
     } else {
-      // Create the config document if it's missing
       await docRef.set({
         'required_version': CURRENT_APP_VERSION,
         'download_url': LATEST_UPDATE_URL,
@@ -67,9 +81,7 @@ Future<void> syncAppVersion() async {
       });
     }
   } catch (e) {
-    // If not logged in, this will fail silently (Permission Denied).
-    // The sync will happen next time an authorized user opens the app.
-    debugPrint("Version sync skipped: $e");
+    debugPrint("Firestore Error during sync: $e");
   }
 }
 
