@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'security_service.dart';
-
+import '../../services/security_service.dart';
+import '../../services/inventory_service.dart';
+import '../../utils/helpers.dart';
+/// Screen for managing patient data. Allows searching for a patient by ID,
+/// viewing the items they currently hold, adding new items, and returning them.
 class PatientsManagementScreen extends StatefulWidget {
   const PatientsManagementScreen({super.key});
 
@@ -22,24 +25,13 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
   List<Map<String, dynamic>> _patientItems = [];
   double _totalCost = 0.0; 
   
-  // Кэш для перевода GroupID в читаемое имя
+  // Cache to map GroupID to human-readable names
   Map<String, String> _groupNamesCache = {};
 
   @override
   void initState() {
     super.initState();
     _loadGroupNames();
-  }
-
-  Future<void> _loadGroupNames() async {
-    try {
-      var snap = await FirebaseFirestore.instance.collection('items_groups').get();
-      for (var doc in snap.docs) {
-        _groupNamesCache[doc.id] = (doc.data())['name'] ?? 'לא ידוע';
-      }
-    } catch (e) {
-      print("Error loading group names: $e");
-    }
   }
 
   @override
@@ -49,6 +41,20 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
     super.dispose();
   }
 
+  /// Loads group names from Firestore into a local cache to avoid 
+  /// querying the DB for every single list item.
+  Future<void> _loadGroupNames() async {
+    try {
+      var snap = await FirebaseFirestore.instance.collection('items_groups').get();
+      for (var doc in snap.docs) {
+        _groupNamesCache[doc.id] = (doc.data())['name'] ?? 'לא ידוע';
+      }
+    } catch (e) {
+      debugPrint("Error loading group names: $e");
+    }
+  }
+
+  /// Calculates the total number of days an item has been held by the patient.
   int _calculateDaysHeld(Timestamp? takenDate) {
     if (takenDate == null) return 0;
     final taken = takenDate.toDate();
@@ -56,10 +62,13 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
     return now.difference(taken).inDays;
   }
 
+  /// Helper to get the UID of the currently logged-in user (staff member).
   String? _getCurrentUserId() {
     return FirebaseAuth.instance.currentUser?.uid;
   }
 
+  /// Searches for a patient using their raw ID, encrypts it, and fetches 
+  /// all items currently assigned to them from Firestore.
   Future<void> _searchPatient() async {
     final rawTZ = _tzController.text.trim();
     
@@ -112,10 +121,12 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
       });
     } catch (e) {
       setState(() => _isSearching = false);
-      print("Search Error: $e");
+      debugPrint("Search Error: $e");
     }
   }
 
+  /// Processes the return of an item, updating its status to 'available' 
+  /// and logging the action in the History collection.
   Future<void> _returnItem(String docId, String itemName, String itemId, String itemGroup) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -161,13 +172,18 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
 
       await batch.commit();
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("הפריט שוחרר בהצלחה"), backgroundColor: Colors.green));
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("הפריט שוחרר בהצלחה"), backgroundColor: Colors.green));
+      }
       _searchPatient();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      if(mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      }
     }
   }
 
+  /// Manually assigns a new item to the currently searched patient based on the provided barcode.
   Future<void> _addItemToPatient() async {
     final itemId = _addItemController.text.trim();
     if (itemId.isEmpty) return;
@@ -181,14 +197,14 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
           .get();
 
       if (snapshot.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("פריט לא נמצא במערכת"), backgroundColor: Colors.red));
+        if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("פריט לא נמצא במערכת"), backgroundColor: Colors.red));
         return;
       }
 
       var itemDoc = snapshot.docs.first;
       var itemData = itemDoc.data() as Map<String, dynamic>;
       
-      // Извлекаем группу с фоллбеком на кэш
+      // Extract group using fallback to cache
       String itemGroup = itemData['group'] ?? _groupNamesCache[itemData['GroupID']] ?? 'לא הוגדר';
 
       if (itemData['status'] == 'broken') {
@@ -217,19 +233,21 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
           String holderEncoded = itemData['patientId'] ?? '';
           String holderDecoded = SecurityService.decryptID(holderEncoded);
           
-          showDialog(
-            context: context,
-            builder: (ctx) => Directionality(
-              textDirection: TextDirection.rtl,
-              child: AlertDialog(
-                title: const Text('הפריט תפוס!'),
-                content: SelectableText('פריט זה כבר נמצא אצל מטופל אחר.\n\nמספר מטופל המחזיק:\n$holderDecoded'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('אישור')),
-                ],
+          if(mounted) {
+            showDialog(
+              context: context,
+              builder: (ctx) => Directionality(
+                textDirection: TextDirection.rtl,
+                child: AlertDialog(
+                  title: const Text('הפריט תפוס!'),
+                  content: SelectableText('פריט זה כבר נמצא אצל מטופל אחר.\n\nמספר מטופל המחזיק:\n$holderDecoded'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('אישור')),
+                  ],
+                ),
               ),
-            ),
-          );
+            );
+          }
           return;
       }
 
@@ -268,14 +286,15 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
       }
 
       _addItemController.clear();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("הפריט נוסף למטופל בהצלחה"), backgroundColor: Colors.green));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("הפריט נוסף למטופל בהצלחה"), backgroundColor: Colors.green));
       _searchPatient();
 
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     }
   }
 
+  /// Displays the dialog for manually adding an item to the patient via Barcode ID.
   void _showAddItemDialog() {
     showDialog(
       context: context,
@@ -426,7 +445,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                                 final daysHeld = _calculateDaysHeld(takenTs);
                                 final cost = item['cost'] != null ? "₪${item['cost']}" : "-"; 
                                 
-                                // ИЗВЛЕЧЕНИЕ ГРУППЫ С ФОЛЛБЕКОМ
+                                // Group extraction with cache fallback
                                 String groupName = item['group'] ?? _groupNamesCache[item['GroupID']] ?? 'לא הוגדר';
 
                                 return Card(

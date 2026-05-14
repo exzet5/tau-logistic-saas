@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:universal_html/html.dart' as html;
-import 'package:excel/excel.dart' hide Border, TextSpan;
-import 'security_service.dart';
+import '../../utils/helpers.dart';
+import '../../services/security_service.dart';
+import '../../services/pdf_service.dart';
+import '../../services/excel_service.dart';
 
+/// Screen for managing patient deposits (Pikadon).
+/// Includes tabs for Pending deposits, Active deposits, and Deposit History.
+/// Features Excel exports and PDF generation for patient signatures.
 class PikadonScreen extends StatefulWidget {
   const PikadonScreen({super.key});
 
@@ -39,7 +39,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
   bool _isLoadingData = true;
   Map<String, String> _usersCache = {};
-  Map<String, String> _groupNamesCache = {}; // Кэш имен групп
+  Map<String, String> _groupNamesCache = {}; 
 
   @override
   void initState() {
@@ -57,6 +57,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     super.dispose();
   }
 
+  /// Loads users and item groups into local memory to avoid repetitive DB calls.
   Future<void> _loadAuxiliaryData() async {
     try {
       var usersSnap = await FirebaseFirestore.instance.collection('users').get();
@@ -77,7 +78,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         });
       }
     } catch (e) {
-      print("Error loading aux data: $e");
+      debugPrint("Error loading aux data: $e");
       if (mounted) {
         setState(() {
           _isLoadingData = false;
@@ -86,7 +87,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  // Перевод ID в имя
+  /// Converts a raw Group ID into a human-readable group name.
   String _getReadableGroupName(String rawGroup) {
     if (rawGroup.isEmpty) return 'לא הוגדר';
     if (rawGroup.length == 20 && !rawGroup.contains(' ')) {
@@ -95,6 +96,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     return rawGroup;
   }
 
+  /// Displays a non-dismissible loading overlay.
   void _showLoading() {
     setState(() => _isProcessing = true);
     showDialog(
@@ -104,11 +106,13 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     );
   }
 
+  /// Hides the loading overlay.
   void _hideLoading() {
     setState(() => _isProcessing = false);
     if (Navigator.canPop(context)) Navigator.pop(context);
   }
 
+  /// Opens a calendar dialog to select a date range for filtering.
   Future<void> _showDateRangePicker(int tabIndex) async {
     final config = CalendarDatePicker2WithActionButtonsConfig(
       calendarType: CalendarDatePicker2Type.range,
@@ -141,6 +145,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
+  /// Applies quick date filters (Today, Yesterday, This Month, etc.).
   void _setQuickDate(int tabIndex, String filterType) {
     DateTime now = DateTime.now();
     DateTime start;
@@ -173,18 +178,10 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     });
   }
 
-  String _getPaymentMethodText(String method) {
-    if (method == 'cash') return 'מזומן';
-    if (method == 'check') return 'צ\'ק';
-    return 'אשראי';
-  }
 
-  IconData _getPaymentMethodIcon(String method) {
-    if (method == 'cash') return Icons.money;
-    if (method == 'check') return Icons.receipt;
-    return Icons.credit_card;
-  }
 
+
+  /// Approves an item handover without requiring a monetary deposit.
   Future<void> _approveWithoutDeposit(String docId) async {
     TextEditingController reasonCtrl = TextEditingController();
     bool? confirm = await showDialog(
@@ -218,6 +215,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
+  /// Processes a pending deposit and moves it to the 'active' state, recording the payment method.
   Future<void> _takeDeposit(String docId, double amount, String patientId, List pendingItems) async {
     String selectedMethod = 'card'; 
 
@@ -338,6 +336,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
+  /// Handles partial deposit returns or forfeitures when a patient returns only some of their items.
   Future<void> _handlePartialAction(DocumentSnapshot doc, String actionType, Map<String, String?> itemPatientMap) async {
     var data = doc.data() as Map<String, dynamic>;
     List items = List.from(data['items'] ?? []);
@@ -376,7 +375,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                   ...List.generate(items.length, (i) {
                     String itemId = items[i]['itemId'].toString();
                     String rawGroup = items[i]['group'] ?? 'לא הוגדר';
-                    String groupName = _getReadableGroupName(rawGroup); // ИЗВЛЕЧЕНИЕ
+                    String groupName = _getReadableGroupName(rawGroup);
                     
                     bool isStillWithPatient = itemPatientMap[itemId] == encryptedPatientId;
                     
@@ -472,7 +471,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                     const Text('בחר לאילו פריטים לעדכן סטטוס זה:', style: TextStyle(fontWeight: FontWeight.bold)),
                     ...List.generate(selectedItems.length, (i) {
                       String rawGroup = selectedItems[i]['group'] ?? 'לא הוגדר';
-                      String groupName = _getReadableGroupName(rawGroup); // ИЗВЛЕЧЕНИЕ
+                      String groupName = _getReadableGroupName(rawGroup);
                       
                       return CheckboxListTile(
                         activeColor: Colors.red,
@@ -602,7 +601,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  // ================= EXCEL EXPORT FUNCTION (ACTIVE) =================
+  // ================= EXCEL EXPORT (ACTIVE) =================
+  /// Delegates generation and downloading of Active Deposits to ExcelService.
   Future<void> _exportActiveToExcel(List<QueryDocumentSnapshot> docs) async {
     if (docs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("אין נתונים לייצוא")));
@@ -611,26 +611,23 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
     _showLoading();
     try {
-      var excel = Excel.createExcel();
-      Sheet sheetObject = excel['פיקדונות פעילים'];
-      excel.setDefaultSheet('פיקדונות פעילים');
+      List<String> headers = [
+        'סכום ב-₪ (Total Cost)', 
+        'אמצעי תשלום', 
+        'פריטים (Items)',
+        'מטופל (Patient ID)',
+        'תאריך לקיחה (Date)'
+      ];
 
-      sheetObject.appendRow([
-        TextCellValue('סכום ב-₪ (Total Cost)'), 
-        TextCellValue('אמצעי תשלום'), 
-        TextCellValue('פריטים (Items)'),
-        TextCellValue('מטופל (Patient ID)'),
-        TextCellValue('תאריך לקיחה (Date)')     
-      ]);
+      List<List<dynamic>> rows = [];
 
       for (var doc in docs) {
         var data = doc.data() as Map<String, dynamic>;
         
         String encryptedPid = data['patientId'] ?? '';
         String patientId = SecurityService.decryptID(encryptedPid);
-        
         double totalCost = (data['totalCost'] ?? 0).toDouble();
-        String paymentMethod = _getPaymentMethodText(data['paymentMethod'] ?? 'card');
+        String paymentMethod = AppHelpers.getPaymentMethodText(data['paymentMethod'] ?? 'card');
         
         Timestamp? ts = data['actionDate'];
         String timeStr = ts != null ? DateFormat('dd/MM/yyyy HH:mm').format(ts.toDate()) : '';
@@ -641,36 +638,28 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
           return "${i['itemName']} [קבוצה: $grp] (ID: ${i['itemId']})";
         }).join(' | ');
 
-        sheetObject.appendRow([
-          DoubleCellValue(totalCost),
-          TextCellValue(paymentMethod),
-          TextCellValue(itemsStr),
-          TextCellValue(patientId),
-          TextCellValue(timeStr),
-        ]);
+        rows.add([totalCost, paymentMethod, itemsStr, patientId, timeStr]);
       }
 
-      var bytes = excel.encode();
-      if (bytes != null) {
-        String fileName = 'Active_Pikadons_${DateFormat('dd_MM_yyyy_HHmm').format(DateTime.now())}.xlsx';
-        if (kIsWeb) {
-          final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-          final url = html.Url.createObjectUrlFromBlob(blob);
-          final anchor = html.AnchorElement(href: url)
-            ..setAttribute("download", fileName)
-            ..click();
-          html.Url.revokeObjectUrl(url);
-        }
-      }
+      String fileName = 'Active_Pikadons_${DateFormat('dd_MM_yyyy_HHmm').format(DateTime.now())}.xlsx';
+      
+      await ExcelService.exportToExcel(
+        sheetName: 'פיקדונות פעילים', 
+        headers: headers, 
+        dataRows: rows, 
+        fileName: fileName
+      );
+
     } catch (e) {
-      print("Excel Export Error: $e");
+      debugPrint("Excel Export Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת Excel: $e'), backgroundColor: Colors.red));
     } finally {
       _hideLoading();
     }
   }
 
-  // ================= EXCEL EXPORT FUNCTION (HISTORY) =================
+  // ================= EXCEL EXPORT (HISTORY) =================
+  /// Delegates generation and downloading of Historical Deposits to ExcelService.
   Future<void> _exportHistoryToExcel(List<Map<String, dynamic>> events) async {
     if (events.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("אין נתונים לייצוא")));
@@ -679,19 +668,17 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
     _showLoading();
     try {
-      var excel = Excel.createExcel();
-      Sheet sheetObject = excel['היסטוריה'];
-      excel.setDefaultSheet('היסטוריה');
+      List<String> headers = [
+        'סכום ב-₪ (Amount)',      
+        'סיבה/הערה (Reason)',
+        'אמצעי תשלום', 
+        'פעולה (Action)',
+        'פריטים (Items)',
+        'מטופל (Patient ID)',
+        'תאריך ושעה (Date)'       
+      ];
 
-      sheetObject.appendRow([
-        TextCellValue('סכום ב-₪ (Amount)'),      
-        TextCellValue('סיבה/הערה (Reason)'),
-        TextCellValue('אמצעי תשלום'), 
-        TextCellValue('פעולה (Action)'),
-        TextCellValue('פריטים (Items)'),
-        TextCellValue('מטופל (Patient ID)'),
-        TextCellValue('תאריך ושעה (Date)')       
-      ]);
+      List<List<dynamic>> rows = [];
 
       for (var event in events) {
         var data = event['data'] as Map<String, dynamic>;
@@ -708,7 +695,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         
         String reason = data['reason'] ?? '';
         double cost = eventType == 'no_deposit' ? 0.0 : (data['totalCost'] ?? 0).toDouble();
-        String paymentMethod = eventType == 'no_deposit' ? 'ללא' : _getPaymentMethodText(data['paymentMethod'] ?? 'card');
+        String paymentMethod = eventType == 'no_deposit' ? 'ללא' : AppHelpers.getPaymentMethodText(data['paymentMethod'] ?? 'card');
         
         Timestamp ts = event['date'];
         String timeStr = DateFormat('dd/MM/yyyy HH:mm').format(ts.toDate());
@@ -719,31 +706,20 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         else if (eventType == 'no_deposit') actionText = 'ללא פיקדון';
         else if (eventType == 'forfeited') actionText = 'חולט';
 
-        sheetObject.appendRow([
-          DoubleCellValue(cost),
-          TextCellValue(reason),
-          TextCellValue(paymentMethod),
-          TextCellValue(actionText),
-          TextCellValue(itemsStr),
-          TextCellValue(patientId),
-          TextCellValue(timeStr),
-        ]);
+        rows.add([cost, reason, paymentMethod, actionText, itemsStr, patientId, timeStr]);
       }
 
-      var bytes = excel.encode();
-      if (bytes != null) {
-        String fileName = 'History_Pikadons_${DateFormat('dd_MM_yyyy_HHmm').format(DateTime.now())}.xlsx';
-        if (kIsWeb) {
-          final blob = html.Blob([bytes], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-          final url = html.Url.createObjectUrlFromBlob(blob);
-          final anchor = html.AnchorElement(href: url)
-            ..setAttribute("download", fileName)
-            ..click();
-          html.Url.revokeObjectUrl(url);
-        }
-      }
+      String fileName = 'History_Pikadons_${DateFormat('dd_MM_yyyy_HHmm').format(DateTime.now())}.xlsx';
+      
+      await ExcelService.exportToExcel(
+        sheetName: 'היסטוריה', 
+        headers: headers, 
+        dataRows: rows, 
+        fileName: fileName
+      );
+
     } catch (e) {
-      print("Excel Export Error: $e");
+      debugPrint("Excel Export Error: $e");
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת Excel: $e'), backgroundColor: Colors.red));
     } finally {
       _hideLoading();
@@ -751,137 +727,31 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   }
 
 
-  // ================= ФУНКЦИЯ ГЕНЕРАЦИИ И СКАЧИВАНИЯ PDF =================
+  // ================= PDF GENERATION (SIGNATURE) =================
+  /// Delegates generation and downloading of the Deposit Agreement Form to PdfService.
   Future<void> _generateAndDownloadPdf(String patientId, List items, double totalCost, String staffName) async {
-    showDialog(
-      context: context, 
-      barrierDismissible: false,
-      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.white))
-    );
-
+    _showLoading();
     try {
-      final pdf = pw.Document();
-      final font = await PdfGoogleFonts.rubikRegular();
-      final fontBold = await PdfGoogleFonts.rubikMedium();
+      List<Map<String, String>> formattedItems = items.map((item) {
+        return {
+          'name': item['itemName']?.toString() ?? 'לא ידוע',
+          'group': _getReadableGroupName(item['group'] ?? ''),
+          'id': item['itemId']?.toString() ?? '',
+          'cost': item['cost']?.toString() ?? '0',
+        };
+      }).toList();
 
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          textDirection: pw.TextDirection.rtl,
-          theme: pw.ThemeData(
-            defaultTextStyle: pw.TextStyle(font: font, fontSize: 14),
-          ),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Center(
-                  child: pw.Text('בית חולים שיקומי רעות', style: pw.TextStyle(font: fontBold, fontSize: 20, color: PdfColors.teal)),
-                ),
-                pw.SizedBox(height: 10),
-                pw.Center(
-                  child: pw.Text('טופס השאלת ציוד והתחייבות לפיקדון', style: pw.TextStyle(font: fontBold, fontSize: 24)),
-                ),
-                pw.SizedBox(height: 30),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Text('תאריך: ${DateFormat('dd/MM/yyyy').format(DateTime.now())}'),
-                    pw.Text('מספר מטופל: $patientId', style: pw.TextStyle(font: fontBold, fontSize: 16)),
-                  ]
-                ),
-                pw.SizedBox(height: 10),
-                pw.Text('נמסר ע"י (איש צוות): $staffName', style: pw.TextStyle(font: font, fontSize: 14)),
-                pw.SizedBox(height: 15),
-                pw.Divider(),
-                pw.SizedBox(height: 15),
-                pw.Text('אני החתום/ה מטה מאשר/ת בזאת כי קיבלתי לידי את הציוד הרפואי המפורט מטה, המהווה רכוש של בית החולים רעות.'),
-                pw.SizedBox(height: 20),
-                pw.Text('פירוט הציוד שהועבר לידיי:', style: pw.TextStyle(font: fontBold, decoration: pw.TextDecoration.underline)),
-                pw.SizedBox(height: 10),
-                ...items.map((item) {
-                  String name = item['itemName'] ?? 'לא ידוע';
-                  String group = _getReadableGroupName(item['group'] ?? ''); // ИЗВЛЕЧЕНИЕ
-                  String id = item['itemId'] ?? '';
-                  String cost = item['cost'].toString();
-                  return pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 6),
-                    child: pw.Text('• $name [$group]  (מזהה: $id)  -  שווי: ₪$cost'),
-                  );
-                }).toList(),
-                pw.SizedBox(height: 20),
-                pw.Container(
-                  width: double.infinity,
-                  padding: const pw.EdgeInsets.all(12),
-                  decoration: pw.BoxDecoration(
-                    color: PdfColors.grey200,
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5))
-                  ),
-                  child: pw.Text('סך הכל דמי פיקדון להפקדה: ₪$totalCost', style: pw.TextStyle(font: fontBold, fontSize: 18)),
-                ),
-                pw.SizedBox(height: 20),
-                pw.Divider(),
-                pw.SizedBox(height: 20),
-                pw.Text('תנאי ההשאלה והפיקדון:', style: pw.TextStyle(font: fontBold, fontSize: 16)),
-                pw.SizedBox(height: 10),
-                pw.Text('1. הציוד נמסר לי כהשאלה לתקופת הטיפול בלבד.'),
-                pw.SizedBox(height: 5),
-                pw.Text('2. אני מתחייב/ת לשמור על הציוד במצב תקין ולהחזירו לבית החולים עם סיום השימוש בו.'),
-                pw.SizedBox(height: 5),
-                pw.Text('3. ידוע לי כי דמי הפיקדון יוחזרו אליי במלואם רק עם החזרת הציוד בשלמותו.'),
-                pw.SizedBox(height: 5),
-                pw.Text('4. במקרה של אובדן או נזק משמעותי לציוד, בית החולים רשאי לחלט את הפיקדון.'),
-                pw.Spacer(),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.Text('_______________________'),
-                        pw.SizedBox(height: 5),
-                        pw.Text('חתימת המטופל', style: pw.TextStyle(font: fontBold)),
-                      ]
-                    ),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.Text('_______________________'),
-                        pw.SizedBox(height: 5),
-                        pw.Text('חתימת בית חולים', style: pw.TextStyle(font: fontBold)), 
-                      ]
-                    )
-                  ]
-                ),
-                pw.SizedBox(height: 40),
-              ],
-            );
-          },
-        ),
+      await PdfService.generateDepositFormPdf(
+        patientId: patientId, 
+        formattedItems: formattedItems, 
+        totalCost: totalCost, 
+        staffName: staffName
       );
 
-      final bytes = await pdf.save();
-
-      if (mounted) Navigator.pop(context); 
-
-      String fileName = 'Tofes_Pikadon.pdf';
-
-      if (kIsWeb) {
-        final blob = html.Blob([bytes], 'application/pdf');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.AnchorElement(href: url)
-          ..setAttribute("download", fileName)
-          ..click();
-        html.Url.revokeObjectUrl(url);
-      } else {
-        await Printing.sharePdf(bytes: bytes, filename: fileName);
-      }
-
     } catch (e) {
-      if (mounted) Navigator.pop(context);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת PDF: $e'), backgroundColor: Colors.red));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת PDF: $e'), backgroundColor: Colors.red));
+    } finally {
+      _hideLoading();
     }
   }
 
@@ -1003,7 +873,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                   const Text("פריטים שנלקחו:", style: TextStyle(fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 5),
                                   ...items.map((item) {
-                                    String grp = _getReadableGroupName(item['group'] ?? ''); // ИЗВЛЕЧЕНИЕ
+                                    String grp = _getReadableGroupName(item['group'] ?? ''); 
                                     return SelectableText("• ${item['itemName'] ?? 'לא ידוע'} [קבוצה: $grp] (ID: ${item['itemId']}) - ₪${item['cost']}");
                                   }).toList(),
                                   const SizedBox(height: 15),
@@ -1075,6 +945,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     );
   }
 
+  /// Builds a summary column widget for active deposits (e.g., total cash, total card).
   Widget _buildSumCol(String title, double amount, Color color, IconData icon) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -1233,9 +1104,9 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                         SelectableText("₪$totalCost", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green)),
                                         Row(
                                           children: [
-                                            Icon(_getPaymentMethodIcon(pMethod), size: 14, color: Colors.grey[700]),
+                                            Icon(AppHelpers.getPaymentMethodIcon(pMethod), size: 14, color: Colors.grey[700]),
                                             const SizedBox(width: 4),
-                                            Text(_getPaymentMethodText(pMethod), style: TextStyle(fontSize: 14, color: Colors.grey[700], fontWeight: FontWeight.bold)),
+                                            Text(AppHelpers.getPaymentMethodText(pMethod), style: TextStyle(fontSize: 14, color: Colors.grey[700], fontWeight: FontWeight.bold)),
                                           ],
                                         )
                                       ],
@@ -1252,7 +1123,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                   children: items.map((i) {
                                     String itemId = i['itemId'].toString();
                                     String rawGroup = i['group'] ?? 'לא הוגדר';
-                                    String groupName = _getReadableGroupName(rawGroup); // ИЗВЛЕЧЕНИЕ
+                                    String groupName = _getReadableGroupName(rawGroup); 
                                     bool isStillWithPatient = itemPatientMap[itemId] == encryptedPid;
                                     
                                     return Container(
@@ -1448,7 +1319,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                 children: [
                                   SelectableText("מטופל: $patientId", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                   SelectableText("פריטים: ${items.map((i) {
-                                    String grp = _getReadableGroupName(i['group'] ?? ''); // ИЗВЛЕЧЕНИЕ
+                                    String grp = _getReadableGroupName(i['group'] ?? ''); 
                                     return "${i['itemName'] ?? 'לא ידוע'} [קבוצה: $grp] (ID: ${i['itemId']})";
                                   }).join(' | ')}", style: const TextStyle(color: Colors.grey)),
                                   if (eventType == 'no_deposit' && reason.isNotEmpty) 
@@ -1471,7 +1342,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                 children: [
                                   SelectableText("₪$cost", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                   if (eventType != 'no_deposit')
-                                    Text(_getPaymentMethodText(pMethod), style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))
+                                    Text(AppHelpers.getPaymentMethodText(pMethod), style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))
                                 ],
                               )
                             ),

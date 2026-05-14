@@ -1,12 +1,16 @@
-import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Handles inventory-related business logic, specifically the deposit (Pikadon) system.
 class PikadonLogic {
+  
+  /// Adds a scanned item to a patient's pending deposit list.
+  /// If a pending session already exists for the patient, the item is appended.
+  /// Otherwise, a new pending deposit record is created.
   static Future<void> addToPendingPikadon(
       String patientId, 
       String itemId, 
       String itemName, 
-      String group, // <--- НОВЫЙ АРГУМЕНТ!
+      String group, 
       double cost, 
       String? staffUid) async {
       
@@ -27,7 +31,7 @@ class PikadonLogic {
         items.add({
           'itemId': itemId,
           'itemName': itemName,
-          'group': group, // <--- СОХРАНЯЕМ ГРУППУ
+          'group': group, 
           'cost': cost
         });
         double currentTotal = (data['totalCost'] ?? 0).toDouble();
@@ -48,7 +52,7 @@ class PikadonLogic {
           {
             'itemId': itemId,
             'itemName': itemName,
-            'group': group, // <--- СОХРАНЯЕМ ГРУППУ
+            'group': group, 
             'cost': cost
           }
         ]
@@ -56,30 +60,5 @@ class PikadonLogic {
     }
 
     await batch.commit();
-  }
-}
-
-class SecurityService {
-  static final _key = encrypt.Key.fromUtf8('MySecretKeyForHospitalApp1234567'); 
-  static final _iv = encrypt.IV.fromUtf8('1234567890123456'); 
-  static final _encrypter = encrypt.Encrypter(encrypt.AES(_key));
-
-  static String encryptID(String plainText) {
-    if (plainText.isEmpty) return "";
-    try {
-      return _encrypter.encrypt(plainText, iv: _iv).base64;
-    } catch (e) {
-      return plainText; 
-    }
-  }
-
-  // ВЕРНУЛ ЗАЩИТУ TRY-CATCH, ИЗ-ЗА КОТОРОЙ ПАДАЛА ИСТОРИЯ!
-  static String decryptID(String encryptedText) {
-    if (encryptedText.isEmpty) return "";
-    try {
-      return _encrypter.decrypt(encrypt.Encrypted.fromBase64(encryptedText), iv: _iv);
-    } catch (e) {
-      return encryptedText; // Если не получилось расшифровать, возвращаем как есть
-    }
   }
 }

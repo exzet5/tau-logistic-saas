@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; 
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:universal_html/html.dart' as html;
-import 'security_service.dart';
-import 'package:printing/printing.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../utils/helpers.dart';
+import '../../services/security_service.dart';
+import '../../services/pdf_service.dart';
 
+/// Screen for managing inventory items, including listing, creating new items,
+/// managing item groups/SKUs, and generating printable PDF barcodes.
 class ItemsManagementScreen extends StatefulWidget {
   const ItemsManagementScreen({super.key});
 
@@ -67,6 +66,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
   }
 
   // --- HELPERS ---
+
+  /// Displays a non-dismissible loading indicator dialog.
   void _showLoadingDialog() {
     showDialog(
       context: context, 
@@ -75,12 +76,14 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Closes the loading indicator dialog if it is currently open.
   void _hideLoadingDialog() {
     if (Navigator.canPop(context)) {
       Navigator.of(context, rootNavigator: true).pop();
     }
   }
 
+  /// Resets the form used for adding new inventory items.
   void _resetForm() {
     setState(() {
       _formResetKey++;
@@ -95,28 +98,17 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     });
   }
 
+  /// Safely extracts the item name from document data.
   String _getName(Map<String, dynamic>? data, String docId) {
     if (data == null) return docId;
     if (data['name'] != null) return data['name'].toString();
     return docId;
   }
 
-  Color _getStatusColor(String status) {
-    if (status == 'available') return Colors.green.shade100;
-    if (status == 'sold') return Colors.purple.shade100;
-    if (status == 'broken' || status == 'lost' || status == 'other') return Colors.red.shade100;
-    return Colors.blue.shade100;
-  }
 
-  String _getStatusText(String status) {
-    if (status == 'available') return 'פנוי';
-    if (status == 'sold') return 'במחסן מכירה';
-    if (status == 'lost') return 'נאבד';
-    if (status == 'broken') return 'תקול';
-    if (status == 'other') return 'יצא משימוש';
-    return 'בשימוש';
-  }
 
+
+  /// Fetches the cost associated with a specific SKU to pre-fill the cost input field.
   Future<void> _fetchCostForSku(String skuId) async {
     try {
       var snap = await FirebaseFirestore.instance.collection('items').where('SKU_ID', isEqualTo: skuId).get();
@@ -134,107 +126,28 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
       }
       if (mounted) setState(() => _costController.clear());
     } catch (e) { 
-      print(e); 
+      debugPrint(e.toString()); 
     }
   }
 
-  String _generateBarcodeWithChecksum(int sequence) {
-    String base = "88${sequence.toString().padLeft(5, '0')}"; 
-    int sum = 0;
-    bool alternate = true;
-    for (int i = base.length - 1; i >= 0; i--) {
-      int n = int.parse(base[i]);
-      if (alternate) { 
-        n *= 2; 
-        if (n > 9) n = (n % 10) + 1; 
-      }
-      sum += n;
-      alternate = !alternate;
-    }
-    int checkDigit = (10 - (sum % 10)) % 10;
-    return "$base$checkDigit";
-  }
 
+
+  /// Delegates the generation and downloading of the Barcodes PDF to PdfService.
   Future<void> _generateBarcodesPdfFromList(List<Map<String, String>> itemsToPrint, String fileNameLabel) async {
     _showLoadingDialog();
     try {
-      final pdf = pw.Document();
-      final font = await PdfGoogleFonts.rubikRegular();
-      
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(20),
-          build: (pw.Context context) {
-            return [
-              pw.Wrap(
-                spacing: 15, 
-                runSpacing: 15,
-                children: itemsToPrint.map((item) {
-                  String code = item['id'] ?? '';
-                  String name = item['name'] ?? '';
-
-                  return pw.Container(
-                    width: 113.4, 
-                    height: 85.0, 
-                    padding: const pw.EdgeInsets.all(4),
-                    decoration: pw.BoxDecoration(
-                      border: pw.Border.all(color: PdfColors.grey300, width: 0.5)
-                    ),
-                    child: pw.Column(
-                      mainAxisAlignment: pw.MainAxisAlignment.center,
-                      children: [
-                        pw.Text(
-                          name, 
-                          textDirection: pw.TextDirection.rtl, 
-                          style: pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold), 
-                          maxLines: 1, 
-                          overflow: pw.TextOverflow.clip
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Expanded(
-                          child: pw.BarcodeWidget(
-                            barcode: pw.Barcode.code128(), 
-                            data: code, 
-                            drawText: false
-                          )
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(code, style: const pw.TextStyle(fontSize: 9, letterSpacing: 2)),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              )
-            ];
-          },
-        ),
-      );
-
-      final bytes = await pdf.save();
-      _hideLoadingDialog();
-
-      String fileName = 'Barcodes_${fileNameLabel}_${itemsToPrint.length}.pdf';
-
-      if (kIsWeb) {
-        final blob = html.Blob([bytes], 'application/pdf');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        html.AnchorElement(href: url)
-          ..setAttribute("download", fileName)
-          ..click();
-        html.Url.revokeObjectUrl(url);
-      } else {
-        await Printing.sharePdf(bytes: bytes, filename: fileName);
-      }
+      await PdfService.generateBarcodesPdf(items: itemsToPrint, fileNameLabel: fileNameLabel);
     } catch (e) {
-      _hideLoadingDialog();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת PDF: $e')));
+    } finally {
+      _hideLoadingDialog();
     }
   }
 
   Stream<QuerySnapshot> _getGroupsStream() => FirebaseFirestore.instance.collection('items_groups').snapshots();
   Stream<QuerySnapshot> _getSkusStream(String groupId) => FirebaseFirestore.instance.collection('SKU').where('GroupID', isEqualTo: groupId).snapshots();
 
+  /// Marks a specific item as deleted (assigning a loss reason) and updates the History log.
   Future<void> _deleteItem(String docId, String itemName, String currentStatus, String itemId) async {
     String selectedReason = 'broken'; 
     
@@ -306,6 +219,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     }
   }
 
+  /// Opens a dialog to edit an individual inventory item's properties (ID, cost, assigned SKU).
   Future<void> _editItemDetails(DocumentSnapshot doc) async {
     final data = doc.data() as Map<String, dynamic>;
     final TextEditingController idCtrl = TextEditingController(text: data['ID']);
@@ -414,7 +328,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       }
                     } catch (e) { 
                       _hideLoadingDialog(); 
-                      print("Error editing item: $e");
+                      debugPrint("Error editing item: $e");
                     }
                   }, 
                   child: const Text("שמור")
@@ -427,6 +341,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Parses manual input for bulk quantity creation.
   void _onManualQuantityChanged(String value) {
     int? v = int.tryParse(value);
     if (v != null && v > 0 && v <= 200) {
@@ -434,6 +349,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     }
   }
 
+  /// Dialog to create a new category (group).
   Future<void> _createNewGroupDialog() async {
     TextEditingController ctrl = TextEditingController();
     await showDialog(
@@ -462,6 +378,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Dialog to create a new SKU within a specific group.
   Future<void> _createNewSkuDialog({String? preselectedGroupId}) async {
     TextEditingController ctrl = TextEditingController();
     String? currentGroupId = preselectedGroupId ?? (_selectedGroupForAdd != null ? _selectedGroupForAdd!['id'] : null);
@@ -500,6 +417,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Dialog to rename a specific document in a collection (used for renaming groups).
   Future<void> _editNameDialog(String collection, String docId, String currentName) async {
     TextEditingController ctrl = TextEditingController(text: currentName);
     await showDialog(
@@ -532,6 +450,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Dialog to edit a SKU, enabling the user to rename it or move it to a different group.
   Future<void> _editSkuDialog(String skuId, String currentName, String currentGroupId) async {
     TextEditingController nameCtrl = TextEditingController(text: currentName);
     Map<String, dynamic>? selectedNewGroup;
@@ -638,6 +557,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Deletes a Group or SKU, safely archiving associated items if permitted.
   Future<void> _deleteGroupOrSku(String collection, String docId, String name, {bool isGroup = false}) async {
     _showLoadingDialog();
     try {
@@ -756,6 +676,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     }
   }
 
+  /// Handles the generation of multiple new inventory items within a transaction, 
+  /// ensuring unique sequential barcodes and updating shared properties.
   Future<void> _saveBulkItems() async {
     setState(() => _submittedAndInvalid = true);
     if (_selectedGroupForAdd == null || _selectedSkuForAdd == null) return;
@@ -776,7 +698,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
         }
         
         for (int i = 0; i < _bulkQuantity; i++) {
-          newBarcodes.add(_generateBarcodeWithChecksum(currentSeq + i));
+          newBarcodes.add(AppHelpers.generateBarcodeWithChecksum(currentSeq + i));
         }
         
         transaction.set(systemRef, {'lastBarcodeSeq': currentSeq + _bulkQuantity}, SetOptions(merge: true));
@@ -811,11 +733,12 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
       
     } catch (e) { 
       _hideLoadingDialog(); 
-      print(e);
+      debugPrint(e.toString());
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("שגיאה: $e"), backgroundColor: Colors.red));
     }
   }
 
+  /// Builds a dynamic dropdown selector with built-in search filtering.
   Widget _buildSearchableSelector({
     Key? key, 
     required String label, 
@@ -950,7 +873,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
           controller: _tabController,
           children: [
             // --- TAB 1: LIST ---
-            // Оборачиваем в StreamBuilder для подтягивания ИМЕН ГРУПП (чтобы сортировать по ним)
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('items_groups').snapshots(),
               builder: (context, groupsSnapshot) {
@@ -982,24 +904,24 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       return mId && mG && mS && mSort;
                     }).toList();
 
-                    // --- АЛФАВИТНАЯ СОРТИРОВКА (Группа -> Мак"т -> ID) ---
+                    // --- ALPHABETICAL SORTING (Group -> SKU -> ID) ---
                     filtered.sort((a, b) {
                       var da = a.data() as Map<String, dynamic>;
                       var db = b.data() as Map<String, dynamic>;
                       
-                      // 1. По группе
-                      String groupA = groupNamesMap[da['GroupID']] ?? 'תת'; // 'תת' уйдет в конец списка
+                      // 1. By Group
+                      String groupA = groupNamesMap[da['GroupID']] ?? 'תת'; 
                       String groupB = groupNamesMap[db['GroupID']] ?? 'תת';
                       int groupCmp = groupA.compareTo(groupB);
                       if (groupCmp != 0) return groupCmp;
                       
-                      // 2. По имени маката
+                      // 2. By SKU Name
                       String skuA = (da['name'] ?? '').toString();
                       String skuB = (db['name'] ?? '').toString();
                       int skuCmp = skuA.compareTo(skuB);
                       if (skuCmp != 0) return skuCmp;
                       
-                      // 3. По ID
+                      // 3. By ID
                       String idA = (da['ID'] ?? '').toString();
                       String idB = (db['ID'] ?? '').toString();
                       return idA.compareTo(idB);
@@ -1109,16 +1031,14 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                               
                               const SizedBox(height: 10),
 
-                              // --- ПАНЕЛЬ ПАГИНАЦИИ И БАРКОДОВ ---
+                              // --- PAGINATION AND BARCODE CONTROLS ---
                               Container(
                                 padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
                                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
                                 child: Row(
                                   children: [
-                                    // ЛЕВАЯ СТОРОНА (Невидимая пружина для баланса центра)
                                     const Expanded(child: SizedBox()),
                                     
-                                    // ЦЕНТР - Пагинация
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -1141,10 +1061,9 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                                       ],
                                     ),
 
-                                    // ПРАВАЯ СТОРОНА - Кнопки Баркодов
                                     Expanded(
                                       child: Align(
-                                        alignment: Alignment.centerLeft, // Прижимаем влево (в RTL это визуально справа)
+                                        alignment: Alignment.centerLeft, 
                                         child: SingleChildScrollView(
                                           scrollDirection: Axis.horizontal,
                                           child: Row(
@@ -1290,8 +1209,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                                         flex: 1, 
                                         child: Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), 
-                                          decoration: BoxDecoration(color: _getStatusColor(d['status'] ?? ''), borderRadius: BorderRadius.circular(4)), 
-                                          child: SelectableText(_getStatusText(d['status'] ?? ''), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center)
+                                          decoration: BoxDecoration(color: AppHelpers.getStatusColor(d['status'] ?? ''), borderRadius: BorderRadius.circular(4)), 
+                                          child: SelectableText(AppHelpers.getStatusText(d['status'] ?? ''), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center)
                                         )
                                       ),
                                       Expanded(
@@ -1576,6 +1495,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     );
   }
 
+  /// Builds the success screen displayed immediately after bulk generating new barcodes.
   Widget _buildSuccessScreen() {
     return Container(
       width: double.infinity, 

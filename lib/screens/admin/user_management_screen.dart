@@ -1,10 +1,11 @@
 import 'dart:math';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:http/http.dart' as http;
+import '../../utils/helpers.dart';
+import '../../services/email_service.dart';
 
-// --- SCREEN 6: USER MANAGEMENT ---
+/// Screen for administrators to add new users, send welcome emails, 
+/// and view/edit/delete existing users and their activity statistics.
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
 
@@ -21,14 +22,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     'admin': 'דשבורדים וניהול מערכת ידני',
   };
     
+  // --- ADD USER CONTROLLERS ---
   final _addEmailCtrl = TextEditingController();
   final _addNameCtrl = TextEditingController();
   final _addSurnameCtrl = TextEditingController();
   String _addSelectedRole = 'user';
+  
   String? _backendEmailError;
   String? _statusMessage;
   bool _isSuccessMessage = true;
 
+  // --- SEARCH/EDIT USER CONTROLLERS ---
   final _searchEmailCtrl = TextEditingController();
   final _editNameCtrl = TextEditingController();
   final _editSurnameCtrl = TextEditingController();
@@ -40,17 +44,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   Map<String, dynamic>? _foundRealUser;
   String? _foundAllowedDocId;
 
+  // --- USER STATISTICS ---
   bool _isLoadingStats = false;
   int _statTaken = 0;
   int _statReturned = 0;
   List<int> _weekDayCounts = [0, 0, 0, 0, 0, 0, 0];
-
-  final String serviceId = 'service_sy28x2a';
-  final String templateId = 'template_f8npr5p';
-  final String userId = 'cena3ADJA-VpQkwqw';
-    
-  final String apkLink = 'https://drive.google.com/file/d/1qDLI0zx13iCYcIKTB_rDXXc6cDIG5b-t/view?usp=sharing';
-  final String webLink = 'https://reot-logistic-warehouse.web.app/';
 
   @override
   void initState() {
@@ -70,12 +68,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     super.dispose();
   }
 
-  bool _isValidEmail(String email) {
-    // Regex allows letters, numbers, dots, underscores, and hyphens before the @ symbol
-    // It also allows multiple dots in the domain name (e.g., .org.il)
-    return RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").hasMatch(email);
-  }
 
+
+  /// Displays a temporary status message (success/error) below the search/add inputs.
   void _showStatus(String msg, {bool success = true}) {
     setState(() {
       _statusMessage = msg;
@@ -86,47 +81,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     });
   }
 
-  Future<void> _sendWelcomeEmail(String email, String name, String role) async {
-    final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
-
-    String adminMsg = "";
-    if (role == 'admin') {
-      adminMsg = "\n\nקישור לממשק מנהלים (Admin):\n$webLink";
-    }
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'service_id': serviceId,
-          'template_id': templateId,
-          'user_id': userId,
-          'template_params': {
-            'to_name': name,
-            'to_email': email,
-            'android_link': apkLink, 
-            'ios_link': webLink,     
-            'admin_info': adminMsg   
-          }
-        }),
-      );
-        
-      if (response.statusCode == 200) {
-        print("Email sent successfully to $email");
-      } else {
-        print("Email Error: ${response.body}");
-        if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(content: Text("שגיאה בשליחת מייל: ${response.body}"), backgroundColor: Colors.red)
-           );
-        }
-      }
-    } catch (e) {
-      print("Email Network Error: $e");
-    }
-  }
-
+  /// Validates inputs, creates a new allowed user record in Firestore, 
+  /// and triggers a welcome email via EmailJS.
   Future<void> _addNewUser() async {
     setState(() { _backendEmailError = null; });
     if (!_formKey.currentState!.validate()) return;
@@ -151,11 +107,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      _sendWelcomeEmail(
-        _addEmailCtrl.text.trim(), 
-        _addNameCtrl.text.trim(),
-        _addSelectedRole
-      );
+      // Delegate email sending to the external EmailService
+      try {
+        await EmailService.sendWelcomeEmail(
+          email: _addEmailCtrl.text.trim().toLowerCase(), 
+          name: _addNameCtrl.text.trim(), 
+          role: _addSelectedRole
+        );
+      } catch (e) {
+        debugPrint("Failed to send welcome email: $e");
+        // We don't block the UI if the email fails, user is already saved in DB
+      }
 
       _showStatus('משתמש נוסף ומייל נשלח!', success: true);
         
@@ -169,6 +131,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     }
   }
 
+  /// Fetches equipment usage statistics for a specific user to display a chart.
   Future<void> _fetchUserStats(String uid) async {
     setState(() {
       _isLoadingStats = true;
@@ -213,11 +176,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       });
 
     } catch (e) {
-      print("Stats Error: $e");
+      debugPrint("Stats Error: $e");
       setState(() { _isLoadingStats = false; });
     }
   }
 
+  /// Searches for a user by email, loading their profile data and statistics.
   Future<void> _searchUser() async {
     final email = _searchEmailCtrl.text.trim().toLowerCase();
     if (email.isEmpty) return;
@@ -256,7 +220,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       Map<String, dynamic>? realUser;
       if (usersSnapshot.docs.isNotEmpty) {
         realUser = usersSnapshot.docs.first.data();
-        if (realUser != null && realUser['uid'] != null) {
+        if (realUser['uid'] != null) {
           _fetchUserStats(realUser['uid']);
         }
       }
@@ -279,6 +243,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     }
   }
 
+  /// Saves modifications made to the user's name, surname, or role.
   Future<void> _saveUserEdits() async {
     if (_foundAllowedDocId == null) return;
     try {
@@ -309,6 +274,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     }
   }
 
+  /// Prompts for confirmation before deleting a user.
   Future<void> _deleteUser() async {
     showDialog(
       context: context,
@@ -333,6 +299,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
+  /// Executes the deletion of the user from allowed_users and deactivates their main profile.
   Future<void> _executeDelete() async {
      if (_foundAllowedDocId == null) return;
      try {
@@ -356,6 +323,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
      }
   }
 
+  /// Helper widget to render status notifications.
   Widget _buildStatusMessage() {
     if (_statusMessage == null) return const SizedBox.shrink();
     return Container(
@@ -378,6 +346,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
+  /// Helper widget to render role selection dropdowns.
   Widget _buildRoleDropdown(String currentVal, Function(String?) onChanged, bool enabled) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -394,6 +363,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
+  /// Builds the visual area displaying user equipment interactions and weekly activity chart.
   Widget _buildStatsArea() {
     if (_isLoadingStats) {
       return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
@@ -432,7 +402,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         color: Colors.white,
         border: Border.all(color: Colors.grey.shade300),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5, offset: const Offset(0, 2))],
+        boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 5, offset: Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,11 +414,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           Row(
             children: [
               Expanded(
-                child: _buildStatCard("פריטים שנלקחו", _statTaken.toString(), Colors.orange.shade100, Colors.orange.shade800),
+                child: _buildStatCard("פריטים שנלקחו", _statTaken.toString(), Colors.orange.shade100, Colors.orange.shade800!),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildStatCard("פריטים שהוחזרו", _statReturned.toString(), Colors.green.shade100, Colors.green.shade800),
+                child: _buildStatCard("פריטים שהוחזרו", _statReturned.toString(), Colors.green.shade100, Colors.green.shade800!),
               ),
             ],
           ),
@@ -490,6 +460,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
+  /// Builds a minimal card for numerical statistics.
   Widget _buildStatCard(String title, String value, Color bgColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(15),
@@ -544,7 +515,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                         onChanged: (_) { if (_backendEmailError != null) setState(() => _backendEmailError = null); },
                         validator: (value) {
                           if (value == null || value.isEmpty) return 'נא להזין אימייל';
-                          if (!_isValidEmail(value)) return 'פורמט אימייל שגוי';
+                          if (!AppHelpers.isValidEmail(value)) return 'פורמט אימייל שגוי';
                           if (_backendEmailError != null) return _backendEmailError;
                           return null;
                         },
@@ -609,7 +580,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                         ],
                       ),
                       const SizedBox(height: 20),
-                      // Last Login
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
@@ -628,7 +598,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                         
                       const SizedBox(height: 20),
 
-                      // Edit Button Row
                       Row(
                         children: [
                            const Text('פרטים אישיים:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),

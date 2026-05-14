@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'main.dart';
-import 'app_screens.dart';
 
+import 'services/update_service.dart';
+import 'screens/role_router_screen.dart';
+import 'screens/login_screen.dart';
+
+/// The root widget of the application.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -13,14 +16,13 @@ class MyApp extends StatelessWidget {
       title: 'Reuth Logistic',
       debugShowCheckedModeBanner: false,
       
-      // --- LOCALIZATION ---
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('he', 'IL'), // Hebrew
+        Locale('he', 'IL'), 
         Locale('en', 'US'),
       ],
 
@@ -43,12 +45,10 @@ class MyApp extends StatelessWidget {
         return Directionality(textDirection: TextDirection.rtl, child: child!);
       },
       
-      // === WRAPPING THE INITIAL SCREEN HERE ===
       home: UpdateCheckerWrapper(
         child: StreamBuilder<User?>(
           stream: FirebaseAuth.instance.authStateChanges(),
           builder: (context, snapshot) {
-            // Wait for the auth state to load
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(
@@ -57,12 +57,10 @@ class MyApp extends StatelessWidget {
               );
             }
 
-            // If the user exists in the stream, go to the home screen
             if (snapshot.hasData) {
               return const HomeScreen();
             }
 
-            // Additional check if the stream is active but data hasn't loaded yet (prevents accidental logouts)
             if (snapshot.connectionState == ConnectionState.active && !snapshot.hasData) {
               final currentUser = FirebaseAuth.instance.currentUser;
               if (currentUser != null) {

@@ -1,529 +1,13 @@
-import 'dart:math';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:mobile_scanner/mobile_scanner.dart' hide Address;
-import 'package:http/http.dart' as http;
-import 'user_management_screen.dart';
-import 'security_service.dart';
-import 'items_screen.dart';
-import 'history_screen.dart';
-import 'dashboard_screen.dart';
-import 'patients_screen.dart';
-import 'pikadon_screen.dart'; 
-import 'main.dart';
-// ВНИМАНИЕ: Класс PikadonLogic отсюда УДАЛЕН. 
-// Программа теперь берет его из файла security_service.dart, чтобы не было ошибок компиляции.
+import '../../utils/helpers.dart';
+import '../../services/inventory_service.dart';
+import '../../services/security_service.dart';
 
-// --- SCREEN 1: LOGIN ---
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController();
-    
-  bool _isCodeSent = false;
-  bool _isLoading = false;
-
-  String? _fetchedName;
-  String? _fetchedSurname;
-  String? _fetchedRole;
-  String? _generatedCode;
-
-  // --- EMAILJS CONFIGURATION ---
-  final String serviceId = 'service_sy28x2a';
-  final String templateId = 'template_je2ry6c';
-  final String userId = 'cena3ADJA-VpQkwqw';
-  // -----------------------------
-
-  Future<void> _verifyEmailAndSendCode() async {
-    final email = _emailController.text.trim().toLowerCase();
-    if (email.isEmpty) return;
-
-    setState(() { _isLoading = true; });
-
-    try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('allowed_users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isEmpty) {
-        _showSnack('האימייל לא נמצא במערכת (אין גישה)');
-        setState(() { _isLoading = false; });
-        return;
-      }
-
-      final data = snapshot.docs.first.data();
-      _fetchedName = data['name'];
-      _fetchedSurname = data['surname'];
-      _fetchedRole = data['role'] ?? 'user';
-
-      if (_fetchedName == null) {
-        _showSnack('שגיאה: חסר שם בהגדרות המערכת');
-        setState(() { _isLoading = false; });
-        return;
-      }
-
-      var rng = Random();
-      _generatedCode = (rng.nextInt(900000) + 100000).toString();
-
-      await _sendEmailJS(
-      name: _fetchedName!,
-      email: email,
-      code: _generatedCode!,
-      updateLink: LATEST_UPDATE_URL, // Passing the parameter here
-    );
-
-      setState(() {
-        _isCodeSent = true;
-        _isLoading = false;
-      });
-      _showSnack('קוד נשלח למייל בהצלחה!');
-        
-    } catch (e) {
-      _showSnack('שגיאה בשליחת אימייל: $e');
-      setState(() { _isLoading = false; });
-    }
-  }
-
-  Future<void> _sendEmailJS({
-    required String name, 
-    required String email, 
-    required String code,
-    required String updateLink, // New required parameter
-  }) async {
-    final url = Uri.parse('https://api.emailjs.com/api/v1.0/email/send');
-      
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: json.encode({
-        'service_id': serviceId,
-        'template_id': templateId,
-        'user_id': userId,
-        'template_params': {
-          'to_name': name,
-          'to_email': email,
-          'message': code,        // Verification code
-          'app_link': updateLink,  // This is your new parameter for the template!
-        }
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw 'EmailJS Error: ${response.body}';
-    }
-  }
-
-  Future<void> _verifyCodeAndLogin() async {
-    final code = _otpController.text.trim();
-      
-    if (code != _generatedCode) {
-      _showSnack('קוד שגוי');
-      return;
-    }
-
-    setState(() { _isLoading = true; });
-
-    try {
-      UserCredential userCredential;
-        
-      try {
-        userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: _emailController.text.trim(),
-          password: "AppPassword123!",
-        );
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'email-already-in-use') {
-           userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: "AppPassword123!",
-          );
-        } else {
-          throw e;
-        }
-      }
-
-      User? user = userCredential.user;
-      if (user != null) {
-        String fullName = "$_fetchedName $_fetchedSurname";
-        await user.updateDisplayName(fullName);
-        
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-          'uid': user.uid,
-          'email': user.email,
-          'name': _fetchedName,
-          'surname': _fetchedSurname,
-          'displayName': fullName,
-          'role': _fetchedRole,
-          'active': true,
-          'lastLogin': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        await user.reload();
-      }
-
-    } catch (e) {
-      _showSnack('שגיאת כניסה: $e');
-      setState(() { _isLoading = false; });
-    }
-  }
-
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Image.asset(
-                  'assets/reuth_logo.png',
-                  height: 220,
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 30),
-                  
-                const Text(
-                  'כניסה למערכת',
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF004D40)),
-                ),
-                const SizedBox(height: 40),
-                  
-                if (!_isCodeSent) ...[
-                  TextField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'אימייל',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    keyboardType: TextInputType.emailAddress,
-                    onSubmitted: (_) => _verifyEmailAndSendCode(),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 60,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _verifyEmailAndSendCode,
-                      child: _isLoading 
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('שלח קוד', style: TextStyle(fontSize: 18)),
-                    ),
-                  ),
-                ] else ...[
-                  Text(
-                    'שלום $_fetchedName $_fetchedSurname',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'קוד נשלח ל-${_emailController.text}',
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 20),
-                  TextField(
-                    controller: _otpController,
-                    decoration: const InputDecoration(
-                      labelText: 'קוד אימות',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onSubmitted: (_) => _verifyCodeAndLogin(),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 60,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _verifyCodeAndLogin,
-                      child: _isLoading 
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('כניסה', style: TextStyle(fontSize: 18)),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => setState(() { _isCodeSent = false; }),
-                    child: const Text('שנה אימייל')
-                  ),
-                ]
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- SCREEN 2: HOME (ROUTER WITH LOCK) ---
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  bool? _isMobileModeLocked; 
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) return const LoginScreen();
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-           return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-        
-        bool isActive = data['active'] ?? true;
-        if (!isActive) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            FirebaseAuth.instance.signOut();
-          });
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
-
-        String role = data['role'] ?? 'user';
-        String displayName = data['displayName'] ?? "${data['name']} ${data['surname']}";
-
-        if (_isMobileModeLocked == null) {
-           double screenWidth = MediaQuery.of(context).size.width;
-           _isMobileModeLocked = screenWidth < 800;
-        }
-
-        if (role == 'admin' && !_isMobileModeLocked!) {
-          return AdminDashboard(displayName: displayName);
-        } else {
-          return UserHomeScreen(displayName: displayName);
-        }
-      }
-    );
-  }
-}
-
-// --- SCREEN 3: USER HOME ---
-class UserHomeScreen extends StatelessWidget {
-  final String displayName;
-  const UserHomeScreen({super.key, required this.displayName});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ניהול ציוד רפואי', style: TextStyle(color: Colors.white)),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF004D40),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-            },
-          )
-        ],
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Image.asset(
-              'assets/reuth_logo.png',
-              height: 200,
-              fit: BoxFit.contain,
-            ),
-            const SizedBox(height: 30),
-              
-            Text(
-              'שלום, $displayName',
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF004D40)),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'ברוכים הבאים למערכת',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-            const SizedBox(height: 50),
-            SizedBox(
-              width: 250,
-              height: 60,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.add_shopping_cart),
-                label: const Text('קח ציוד', style: TextStyle(fontSize: 20)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const ScannerScreen(mode: 'take')),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: 250,
-              height: 60,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.assignment_return),
-                label: const Text('החזר ציוד', style: TextStyle(fontSize: 20)),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const ScannerScreen(mode: 'return')),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- SCREEN 4: ADMIN DASHBOARD ---
-class AdminDashboard extends StatefulWidget {
-  final String displayName; 
-  const AdminDashboard({super.key, required this.displayName});
-
-  @override
-  State<AdminDashboard> createState() => _AdminDashboardState();
-}
-
-class _AdminDashboardState extends State<AdminDashboard> {
-  int _selectedIndex = 0;
-
-  final List<Widget> _pages = [
-    const DashboardScreen(), 
-    const UserManagementScreen(), 
-    const PatientsManagementScreen(), 
-    const ItemsManagementScreen(), 
-    const PikadonScreen(), 
-    const HistoryScreen(), 
-  ];
-
-  String _getGreeting() {
-    var hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 12) {
-      return 'בוקר טוב'; 
-    } else if (hour >= 12 && hour < 17) {
-      return 'צהריים טובים'; 
-    } else if (hour >= 17 && hour < 21) {
-      return 'ערב טוב'; 
-    } else {
-      return 'לילה טוב'; 
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "${_getGreeting()}, ${widget.displayName}",
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const Text(
-              "מערכת ניהול (Admin)",
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.blueGrey[900],
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-            },
-          )
-        ],
-      ),
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (int index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            labelType: NavigationRailLabelType.all,
-            destinations: [
-              const NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('ראשי')),
-              const NavigationRailDestination(icon: Icon(Icons.people), label: Text('משתמשים')),
-              const NavigationRailDestination(icon: Icon(Icons.sick), label: Text('מטופלים')),
-              const NavigationRailDestination(icon: Icon(Icons.inventory), label: Text('ציוד')),
-              
-              NavigationRailDestination(
-                icon: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('Pikadon')
-                      .where('status', isEqualTo: 'pending')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int pendingCount = 0;
-                    if (snapshot.hasData) {
-                      pendingCount = snapshot.data!.docs.length;
-                    }
-                    if (pendingCount > 0) {
-                      return Badge(
-                        label: Text(pendingCount.toString()),
-                        child: const Icon(Icons.account_balance_wallet),
-                      );
-                    }
-                    return const Icon(Icons.account_balance_wallet);
-                  },
-                ),
-                label: const Text('פיקדונות'),
-              ),
-
-              const NavigationRailDestination(icon: Icon(Icons.history), label: Text('היסטוריה')), 
-            ],
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          Expanded(
-            child: _pages[_selectedIndex],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// --- SCREEN 5: SCANNER LOGIC ---
+/// Handles the scanning process for taking and returning medical equipment.
+/// Supports both camera scanning and manual barcode entry.
 class ScannerScreen extends StatefulWidget {
   final String mode;
 
@@ -554,7 +38,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   
   // Data for error screens
   String? _errorItemName;
-  String? _errorItemGroup; // <--- НОВОЕ ПОЛЕ ДЛЯ ОШИБОК
+  String? _errorItemGroup; 
   String? _errorPatientId;
   String? _errorItemId;
   String? _lastScannedBarcode; 
@@ -566,7 +50,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     super.dispose();
   }
 
-  // Helper to fetch group name
+  /// Fetches the group name from the item data or from the 'items_groups' collection.
   Future<String> _getGroupName(Map<String, dynamic> data) async {
     if (data.containsKey('group') && data['group'] != null && data['group'].toString().isNotEmpty) {
       return data['group'].toString();
@@ -580,30 +64,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     return 'לא הוגדר';
   }
 
-  bool _isValidItemBarcode(String barcode) {
-    if (barcode.length != 8) return false;
-    if (!barcode.startsWith('88')) return false;
-    if (int.tryParse(barcode) == null) return false;
 
-    String base = barcode.substring(0, 7);
-    int expectedCheckDigit = int.parse(barcode.substring(7));
-    
-    int sum = 0;
-    bool alternate = true;
-    for (int i = base.length - 1; i >= 0; i--) {
-      int n = int.parse(base[i]);
-      if (alternate) {
-        n *= 2;
-        if (n > 9) n = (n % 10) + 1;
-      }
-      sum += n;
-      alternate = !alternate;
-    }
-    
-    int calculatedCheckDigit = (10 - (sum % 10)) % 10;
-    return expectedCheckDigit == calculatedCheckDigit;
-  }
 
+  /// Fully resets the scanning state and all active error flags.
   void _resetScan() {
     setState(() {
       _sessionItems.clear();
@@ -620,7 +83,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       _invalidBarcodeFormatError = false;
       
       _errorItemName = null;
-      _errorItemGroup = null; // сброс группы
+      _errorItemGroup = null; 
       _errorPatientId = null;
       _errorItemId = null;
       _lastScannedBarcode = null;
@@ -628,6 +91,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
+  /// Clears only error flags to allow continuing the current session.
   void _dismissError() {
     setState(() {
       _itemInUseError = false;
@@ -646,6 +110,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
+  /// Returns to the list of currently scanned items without clearing them.
   void _backToList() {
     setState(() {
       _itemInUseError = false;
@@ -662,6 +127,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
+  /// Activates the camera to scan the next item in the session.
   void _scanNextItem() {
     setState(() {
       _isAddingMoreItems = true;
@@ -669,6 +135,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
+  /// Switches the scanner context to expect a patient ID instead of an item barcode.
   void _goToPatientScan() {
     setState(() {
       _isScanningPatient = true;
@@ -677,6 +144,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
+  /// Displays a confirmation dialog to remove a specific item from the pending list.
   void _confirmRemoveItem(int index) {
     final item = _sessionItems[index];
     final data = item.data() as Map<String, dynamic>;
@@ -714,6 +182,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Shows the final confirmation dialog before assigning scanned items to the patient.
   Future<void> _showFinalAssignmentDialog(String patientId) async {
     showDialog(
       context: context,
@@ -774,7 +243,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(ctx);
-                      // Передаем мапу с группами внутрь _executeAssignment
                       _executeAssignment(patientId, groupNamesMap);
                     },
                     child: const Text('אישור (החל)'),
@@ -788,7 +256,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
-  // UPDATED: Added group parameter and History updating
+  /// Processes the assignment, updates item status in Firestore, writes history, 
+  /// and calculates required deposits (Pikadon).
   Future<void> _executeAssignment(String patientId, Map<String, String> groupNamesMap) async {
     try {
       String encryptedPatientId = SecurityService.encryptID(patientId);
@@ -810,7 +279,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         batch.set(historyRef, {
           'itemId': itemData['ID'],
           'itemName': itemData['name'],
-          'group': groupName, // <--- ADDED GROUP TO HISTORY
+          'group': groupName, 
           'action': 'take',
           'patientId': encryptedPatientId,
           'timestamp': FieldValue.serverTimestamp(),
@@ -826,13 +295,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
         String groupName = itemData['group'] ?? groupNamesMap[itemData['GroupID']] ?? 'לא הוגדר';
 
         if (itemCost > 0) {
-          // ВНИМАНИЕ: Здесь добавлен 4-й аргумент groupName. 
-          // Метод в security_service.dart должен быть обновлен (см. ниже).
           await PikadonLogic.addToPendingPikadon(
             encryptedPatientId, 
             itemData['ID'].toString(), 
             itemData['name'] ?? 'Unknown', 
-            groupName, // <--- ADDED GROUP FOR PIKADON
+            groupName, 
             itemCost,
             user?.uid 
           );
@@ -847,6 +314,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
+  /// Looks up an item in Firestore using its barcode.
   Future<DocumentSnapshot?> _findItemSnapshot(String barcode) async {
     try {
       final querySnapshot = await FirebaseFirestore.instance
@@ -855,10 +323,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
           .limit(1)
           .get();
       if (querySnapshot.docs.isNotEmpty) return querySnapshot.docs.first;
-    } catch (e) { print("Error: $e"); }
+    } catch (e) { 
+      debugPrint("Error: $e"); 
+    }
     return null;
   }
 
+  /// Main handler for camera detections. Triggers the appropriate flow based on the screen mode.
   void _handleBarcode(BarcodeCapture capture) async {
     if (_isProcessing) return;
 
@@ -882,6 +353,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
+  /// Validates and handles barcodes scanned during the 'take' equipment flow.
   Future<void> _handleTakeFlow(String barcode) async {
     if (_isScanningPatient) {
       if (barcode.trim().isEmpty) {
@@ -894,7 +366,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       return;
     }
 
-    if (!_isValidItemBarcode(barcode)) {
+    if (!AppHelpers.isValidItemBarcode(barcode)) {
       setState(() {
         _invalidBarcodeFormatError = true;
         _lastScannedBarcode = barcode;
@@ -966,8 +438,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
+  /// Validates and handles barcodes scanned during the 'return' equipment flow.
   Future<void> _handleReturnFlow(String barcode) async {
-    if (!_isValidItemBarcode(barcode)) {
+    if (!AppHelpers.isValidItemBarcode(barcode)) {
       setState(() {
         _invalidBarcodeFormatError = true;
         _lastScannedBarcode = barcode;
@@ -1009,7 +482,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     });
   }
 
-  // UPDATED: Fetches group name and stores to History
+  /// Submits the return operation, updates Firestore status to available, and writes to History.
   Future<void> _confirmReturn() async {
     if (_returnCandidate == null || _isProcessing) return;
 
@@ -1034,7 +507,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       batch.set(historyRef, {
         'itemId': iId,
         'itemName': itemName,
-        'group': groupName, // <--- ADDED GROUP TO HISTORY
+        'group': groupName, 
         'action': 'return',
         'patientId': encryptedPid,
         'timestamp': FieldValue.serverTimestamp(),
@@ -1051,6 +524,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     }
   }
 
+  /// Opens a dialog to manually enter a barcode or patient ID.
   void _showManualEntryDialog() {
     _manualInputController.clear();
     
@@ -1096,6 +570,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Displays a brief notification snackbar.
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
@@ -1142,6 +617,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Determines if the manual entry Floating Action Button should be visible.
   bool _shouldShowManualButton() {
     bool hasAnyError = _itemInUseError || _itemFreeError || _itemBrokenError || _itemAlreadyInListError || _itemNotFoundError || _invalidBarcodeFormatError;
     if (hasAnyError) return false;
@@ -1154,6 +630,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     return true;
   }
 
+  /// Determines if the bottom instruction text area should be hidden.
   bool _shouldHideBottomText() {
     bool hasAnyError = _itemInUseError || _itemFreeError || _itemBrokenError || _itemAlreadyInListError || _itemNotFoundError || _invalidBarcodeFormatError;
     if (hasAnyError) return true;
@@ -1162,6 +639,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     return false;
   }
 
+  /// Builds the main content area, toggling between the camera view and overlay screens.
   Widget _buildMainContent() {
     bool hasAnyError = _itemInUseError || _itemFreeError || _itemBrokenError || _itemAlreadyInListError || _itemNotFoundError || _invalidBarcodeFormatError;
     bool showCamera = !(hasAnyError || 
@@ -1209,6 +687,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Renders the appropriate overlay screen based on the current state or error.
   Widget _buildOverlayScreens() {
     if (_itemInUseError) return _buildErrorScreenInUse();
     if (_itemFreeError) return _buildErrorScreenFree();
@@ -1228,6 +707,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     return const SizedBox.shrink();
   }
 
+  /// Builds the instruction text area at the bottom of the scanner.
   Widget _buildInstructionArea() {
     String text = '';
     if (widget.mode == 'take') {
@@ -1255,6 +735,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Displays the list of items currently staged for the 'take' operation.
   Widget _buildTakeListScreen() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('items_groups').snapshots(),
@@ -1342,6 +823,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Displays the confirmation screen when attempting to return an item.
   Widget _buildReturnConfirmationScreen() {
     final data = _returnCandidate!.data() as Map<String, dynamic>;
     String name = data['name'] ?? 'Unknown';
@@ -1411,6 +893,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   // --- ERROR SCREENS ---
 
+  /// Builds the error screen shown when a scanned barcode does not match hospital standards.
   Widget _buildErrorScreenInvalidFormat() {
     return Container(
       color: Colors.white,
@@ -1442,6 +925,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Builds the error screen shown when the user scans an item already present in their staging list.
   Widget _buildErrorScreenAlreadyInList() {
     return Container(
       color: Colors.white,
@@ -1483,6 +967,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Builds the error screen shown when a scanned barcode is not found in the database.
   Widget _buildErrorScreenNotFound() {
     return Container(
       color: Colors.white,
@@ -1514,6 +999,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Builds the error screen shown when attempting to take an item that is already assigned to a patient.
   Widget _buildErrorScreenInUse() {
     return _buildGenericError(
       title: 'הפריט בשימוש!',
@@ -1529,6 +1015,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Builds the error screen shown when attempting to return an item that is already available.
   Widget _buildErrorScreenFree() {
     return _buildGenericError(
       title: 'שגיאה: הפריט פנוי',
@@ -1544,6 +1031,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// Builds the error screen shown when an item is marked as broken, lost, or sold.
   Widget _buildErrorScreenBroken() {
     return _buildGenericError(
       title: 'שגיאה: הפריט יצא משימוש',
@@ -1559,6 +1047,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 
+  /// A helper widget to consistently format generic error screens.
   Widget _buildGenericError({required String title, required IconData icon, required Widget content}) {
     return Container(
       color: Colors.white,
@@ -1601,4 +1090,3 @@ class _ScannerScreenState extends State<ScannerScreen> {
     );
   }
 }
-

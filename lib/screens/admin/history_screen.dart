@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
-import 'security_service.dart';
+import '../../utils/helpers.dart';
+import '../../services/security_service.dart';
 
+/// Screen displaying the complete audit log of all equipment actions (take, return, lost, etc.).
+/// Provides advanced filtering capabilities by date, action type, user, patient, and SKU.
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -15,13 +18,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   bool _isLoadingData = true;
+  
+  // --- CACHES ---
   Map<String, Map<String, dynamic>> _itemsCache = {};
   Map<String, String> _usersCache = {};
-  Map<String, String> _groupNamesCache = {}; // Кэш имен групп
+  Map<String, String> _groupNamesCache = {}; 
   
+  // --- FILTERS ---
   String _searchQuery = "";
   List<DateTime?> _rangeDatePickerValueWithDefaultValue = [];
-  
   String _actionFilter = 'all'; 
   String _subActionFilter = 'all';
 
@@ -41,9 +46,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
     super.dispose();
   }
 
+  /// Fetches users, groups, and items from Firestore to populate local caches.
+  /// This prevents excessive database reads during list rendering and filtering.
   Future<void> _loadAuxiliaryData() async {
     try {
-      // 1. Грузим юзеров
+      // 1. Load users for displaying staff names instead of UIDs
       var usersSnap = await FirebaseFirestore.instance.collection('users').get();
       for (var doc in usersSnap.docs) {
         var data = doc.data();
@@ -51,13 +58,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _usersCache[doc.id] = name;
       }
 
-      // 2. Грузим названия групп, чтобы заменять ID на имена
+      // 2. Load group names to resolve GroupIDs
       var groupsSnap = await FirebaseFirestore.instance.collection('items_groups').get();
       for (var doc in groupsSnap.docs) {
         _groupNamesCache[doc.id] = (doc.data())['name']?.toString() ?? doc.id;
       }
 
-      // 3. Грузим айтемы
+      // 3. Load items to resolve item details based on ID
       var itemsSnap = await FirebaseFirestore.instance.collection('items').get();
       for (var doc in itemsSnap.docs) {
         var data = doc.data();
@@ -71,21 +78,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
       if (mounted) setState(() => _isLoadingData = false);
     } catch (e) {
-      print("Error loading aux data: $e");
+      debugPrint("Error loading aux data: $e");
       if (mounted) setState(() => _isLoadingData = false);
     }
   }
 
-  // Вспомогательная функция для извлечения имени группы
+  /// Helper to convert a raw group string (either an ID or a direct name) 
+  /// into a human-readable group name using the cache.
   String _getReadableGroupName(String rawGroup) {
     if (rawGroup.isEmpty) return 'לא הוגדר';
-    // Если строка похожа на ID Firestore (20 символов без пробелов), пытаемся перевести
+    // If the string looks like a standard Firestore 20-character ID, attempt lookup
     if (rawGroup.length == 20 && !rawGroup.contains(' ')) {
       return _groupNamesCache[rawGroup] ?? 'לא הוגדר';
     }
     return rawGroup;
   }
 
+  /// Opens the date range picker dialog to filter history by dates.
   Future<void> _showDateRangePicker() async {
     final values = await showCalendarDatePicker2Dialog(
       context: context,
@@ -106,8 +115,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (values != null) setState(() => _rangeDatePickerValueWithDefaultValue = values);
   }
 
+  /// Clears the selected date range.
   void _resetDates() => setState(() => _rangeDatePickerValueWithDefaultValue = []);
 
+  /// Completely resets all active search parameters, dates, and dropdown filters.
   void _clearAllFilters() {
     _searchController.clear();
     setState(() {
@@ -121,6 +132,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
+  /// Generates a visual badge to represent the specific action performed on the item.
   Widget _buildActionBadge(String action) {
     action = action.toLowerCase();
     
@@ -154,6 +166,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Stream<QuerySnapshot> _getGroupsStream() => FirebaseFirestore.instance.collection('items_groups').snapshots();
   Stream<QuerySnapshot> _getSkusStream(String groupId) => FirebaseFirestore.instance.collection('SKU').where('GroupID', isEqualTo: groupId).snapshots();
 
+  /// Builds an autocomplete dropdown selector for filtering groups or SKUs.
   Widget _buildFilterSelector({required String label, required Stream<QuerySnapshot> stream, required Function(Map<String, dynamic>?) onSelected, required String? selectedName}) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
@@ -209,7 +222,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 children: [
                   Row(
                     children: [
-                      Expanded(flex: 3, child: TextField(controller: _searchController, decoration: const InputDecoration(labelText: 'חיפוש (שם, ID, עובד, מטופל)', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true), onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase()))),
+                      Expanded(
+                        flex: 3, 
+                        child: TextField(
+                          controller: _searchController, 
+                          decoration: const InputDecoration(labelText: 'חיפוש (שם, ID, עובד, מטופל)', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true), 
+                          onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase())
+                        )
+                      ),
                       const SizedBox(width: 15),
                       Expanded(
                         flex: 1, 
@@ -250,13 +270,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   const SizedBox(height: 15),
                   Row(
                     children: [
-                      Expanded(flex: 2, child: OutlinedButton.icon(onPressed: _showDateRangePicker, icon: const Icon(Icons.calendar_month, color: Color(0xFF004D40)), label: Text(dateButtonText, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis), style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10), side: const BorderSide(color: Colors.grey), alignment: Alignment.centerRight))),
+                      Expanded(
+                        flex: 2, 
+                        child: OutlinedButton.icon(
+                          onPressed: _showDateRangePicker, 
+                          icon: const Icon(Icons.calendar_month, color: Color(0xFF004D40)), 
+                          label: Text(dateButtonText, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15), overflow: TextOverflow.ellipsis), 
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10), side: const BorderSide(color: Colors.grey), alignment: Alignment.centerRight)
+                        )
+                      ),
                       const SizedBox(width: 10),
                       TextButton(onPressed: _resetDates, style: TextButton.styleFrom(foregroundColor: hasDate ? Colors.red : Colors.grey), child: const Text("כל הזמנים", style: TextStyle(fontWeight: FontWeight.bold))),
                       const SizedBox(width: 15),
-                      Expanded(flex: 2, child: _buildFilterSelector(label: "קבוצה", stream: _getGroupsStream(), selectedName: _filterGroup?['name'], onSelected: (sel) => setState(() { _filterGroup = sel; _filterSku = null; _filterSelectorKey++; }))),
+                      Expanded(
+                        flex: 2, 
+                        child: _buildFilterSelector(label: "קבוצה", stream: _getGroupsStream(), selectedName: _filterGroup?['name'], onSelected: (sel) => setState(() { _filterGroup = sel; _filterSku = null; _filterSelectorKey++; }))
+                      ),
                       const SizedBox(width: 10),
-                      Expanded(flex: 2, child: _filterGroup == null ? const Opacity(opacity: 0.5, child: TextField(enabled: false, decoration: InputDecoration(labelText: "מק\"ט (בחר קבוצה)", border: OutlineInputBorder(), isDense: true))) : _buildFilterSelector(label: "מק\"ט", stream: _getSkusStream(_filterGroup!['id']), selectedName: _filterSku?['name'], onSelected: (sel) => setState(() { _filterSku = sel; _filterSelectorKey++; }))),
+                      Expanded(
+                        flex: 2, 
+                        child: _filterGroup == null 
+                          ? const Opacity(opacity: 0.5, child: TextField(enabled: false, decoration: InputDecoration(labelText: "מק\"ט (בחר קבוצה)", border: OutlineInputBorder(), isDense: true))) 
+                          : _buildFilterSelector(label: "מק\"ט", stream: _getSkusStream(_filterGroup!['id']), selectedName: _filterSku?['name'], onSelected: (sel) => setState(() { _filterSku = sel; _filterSelectorKey++; }))
+                      ),
                     ],
                   ),
                 ],
@@ -325,6 +361,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   }).toList();
 
                   if (filtered.isEmpty) return const Center(child: Text("לא נמצאו רשומות", style: TextStyle(fontSize: 20, color: Colors.grey)));
+                  
+                  // Optimize rendering by limiting to 200 items max
                   var displayList = filtered.take(200).toList();
 
                   return ListView.builder(
@@ -337,13 +375,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         var data = doc.data() as Map<String, dynamic>;
 
                         String dateStr = '-';
-                        if (data['timestamp'] != null && data['timestamp'] is Timestamp) dateStr = DateFormat('dd/MM/yyyy\nHH:mm').format((data['timestamp'] as Timestamp).toDate());
+                        if (data['timestamp'] != null && data['timestamp'] is Timestamp) {
+                          dateStr = DateFormat('dd/MM/yyyy\nHH:mm').format((data['timestamp'] as Timestamp).toDate());
+                        }
                         
                         String itemId = data['itemId']?.toString() ?? '';
                         String docItemName = data['itemName']?.toString() ?? '';
                         String displayItemName = (docItemName.isNotEmpty && docItemName != 'Unknown') ? docItemName : (_itemsCache[itemId]?['name']?.toString() ?? 'לא ידוע');
 
-                        // ИЗВЛЕЧЕНИЕ ГРУППЫ С ПЕРЕВОДОМ
                         String rawGroup = data['group']?.toString() ?? _itemsCache[itemId]?['group']?.toString() ?? 'לא הוגדר';
                         String groupName = _getReadableGroupName(rawGroup);
 
@@ -379,7 +418,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             ),
                           ),
                         );
-                      } catch (e) { return Card(color: Colors.red.shade100, child: Padding(padding: const EdgeInsets.all(8), child: Text('שגיאה במסמך', textDirection: TextDirection.ltr))); }
+                      } catch (e) { return Card(color: Colors.red.shade100, child: const Padding(padding: EdgeInsets.all(8), child: Text('שגיאה במסמך', textDirection: TextDirection.ltr))); }
                     },
                   );
                 },

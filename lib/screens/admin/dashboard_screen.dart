@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart' hide TextDirection;
-import 'security_service.dart';
 import 'dart:math' as math;
+import '../../utils/helpers.dart';
+import '../../services/security_service.dart';
 
+/// Defines the time range for the statistics chart.
 enum TimeRange { monthly, yearly }
 
+/// The main dashboard screen for admins displaying real-time statistics, 
+/// alerts (low stock, overdue), equipment efficiency, and historical charts.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -24,8 +28,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- FILTERS (EFFICIENCY) ---
   String? _efficiencyGroupFilter;
-  String? _efficiencySkuFilter; // Selected SKU ID
-  String? _efficiencySkuName; // Selected SKU Name
+  String? _efficiencySkuFilter; 
+  String? _efficiencySkuName; 
 
   // --- SETTINGS (STATS CHART) ---
   bool _showAdded = true;
@@ -35,14 +39,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _chartSkuFilter;
   int _chartFilterKey = 0;
 
-  // НОВЫЙ ФИЛЬТР ДЛЯ ПРИЧИН УДАЛЕНИЯ
+  // Filter for specific item loss reasons
   String _chartLossReasonFilter = 'all'; 
 
-  // CACHE
+  // --- CACHE ---
   Map<String, String> _groupNames = {};
   Map<String, List<Map<String, String>>> _skuByGroup = {};
 
-  // SCROLL CONTROLLERS
+  // --- SCROLL CONTROLLERS ---
   final ScrollController _lowStockScrollCtrl = ScrollController();
   final ScrollController _overdueScrollCtrl = ScrollController();
 
@@ -59,9 +63,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+  /// Fetches group names and associated SKUs to populate the filter dropdowns.
   Future<void> _loadFiltersData() async {
-    var gSnap =
-        await FirebaseFirestore.instance.collection('items_groups').get();
+    var gSnap = await FirebaseFirestore.instance.collection('items_groups').get();
     for (var doc in gSnap.docs) {
       _groupNames[doc.id] = doc.data()['name'] ?? doc.id;
       var sSnap = await FirebaseFirestore.instance
@@ -90,7 +94,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           var docs = snapshot.data!.docs;
 
-          // 1. RAW DATA (Исключаем все 4 типа удаления)
+          // 1. RAW DATA (Exclude all 4 loss statuses to find active inventory)
           List<String> lossStatuses = ['broken', 'lost', 'sold', 'other'];
           var activeDocs = docs.where((d) {
             var data = d.data() as Map<String, dynamic>;
@@ -112,7 +116,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Map<String, int> skuAvailable = {};
           Map<String, int> skuTotal = {};
           Map<String, String> skuExampleId = {};
-          Map<String, String> skuGroupNames = {}; // To store group names for SKU
+          Map<String, String> skuGroupNames = {};
 
           for (var doc in activeDocs) {
             var d = doc.data() as Map<String, dynamic>;
@@ -136,7 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               skuAvailable[name] = (skuAvailable[name] ?? 0);
             }
             skuExampleId[name] = id;
-            skuGroupNames[name] = groupName; // Cache group name
+            skuGroupNames[name] = groupName; 
           }
 
           var lowStockItems = skuAvailable.entries
@@ -144,8 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               .toList();
 
           // 3. PREPARE OVERDUE DATA
-          DateTime overdueDate =
-              DateTime.now().subtract(Duration(days: _overdueDays));
+          DateTime overdueDate = DateTime.now().subtract(Duration(days: _overdueDays));
               
           var overdueItems = activeDocs.where((d) {
             var data = d.data() as Map<String, dynamic>;
@@ -179,12 +182,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 spacing: 15,
                 runSpacing: 15,
                 children: [
-                  _buildStatCard("פעילים במלאי", totalActive.toString(),
-                      Icons.inventory, Colors.teal),
-                  _buildStatCard("פנויים לשימוש", available.toString(),
-                      Icons.check_circle, Colors.green),
-                  _buildStatCard("בשימוש כרגע", inUse.toString(),
-                      Icons.people, Colors.blue),
+                  _buildStatCard("פעילים במלאי", totalActive.toString(), Icons.inventory, Colors.teal),
+                  _buildStatCard("פנויים לשימוש", available.toString(), Icons.check_circle, Colors.green),
+                  _buildStatCard("בשימוש כרגע", inUse.toString(), Icons.people, Colors.blue),
                 ],
               ),
               const SizedBox(height: 30),
@@ -245,6 +245,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- 1. ALERTS WIDGETS ---
 
+  /// Builds the alert panel displaying items that have reached the low stock threshold.
   Widget _buildLowStockAlert(
       List<MapEntry<String, int>> items,
       Map<String, String> exampleIds,
@@ -334,7 +335,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         "${e.key} (ID: ${exampleIds[e.key] ?? '...'})",
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      // Added group name
                       subtitle: Text("קבוצה: $group", style: TextStyle(color: Colors.grey[700], fontSize: 12)),
                       trailing: Chip(
                         label: Text("${e.value} פנויים מתוך $total"),
@@ -355,6 +355,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Builds the alert panel displaying items currently exceeding the allowed taken duration.
   Widget _buildOverdueAlert(List<QueryDocumentSnapshot<Object?>> items) {
     return _buildAlertBox(
       titleWidget: Row(
@@ -407,7 +408,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       contentPadding:
                           const EdgeInsets.symmetric(horizontal: 5),
                       title: SelectableText("${d['name']} (ID: ${d['ID']})"),
-                      // Added group name
                       subtitle: SelectableText("קבוצה: $group | אצל: $pId", style: TextStyle(color: Colors.grey[700], fontSize: 12)),
                       trailing: Text(
                         "$days ימים",
@@ -424,6 +424,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- 2. EFFICIENCY SECTION ---
 
+  /// Calculates and builds the complex UI for the Efficiency section, computing 
+  /// historical usage rates for different SKUs based on their creation dates.
   Widget _buildEfficiencySection(List<QueryDocumentSnapshot> activeDocs) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('History').snapshots(),
@@ -439,7 +441,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         DateTime now = DateTime.now();
 
         Map<String, String> skuNames = {};
-        Map<String, String> skuGroups = {}; // To store group for SKU
+        Map<String, String> skuGroups = {}; 
         Map<String, List<DateTime>> itemAddedDates = {};
         Map<String, List<String>> itemsInSku = {};
 
@@ -526,7 +528,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           skuStats.add({
             'id': skuId,
             'name': skuNames[skuId] ?? skuId,
-            'group': skuGroups[skuId] ?? 'לא הוגדר', // Save group in stats
+            'group': skuGroups[skuId] ?? 'לא הוגדר', 
             'rate': rate,
           });
         });
@@ -705,6 +707,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Builds a visual ranking list for efficiency statistics (e.g., top 5 used, bottom 5 unused).
   Widget _buildEfficiencyList(
       String title, List<Map<String, dynamic>> items, Color bgColor) {
     return Container(
@@ -726,7 +729,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               contentPadding: EdgeInsets.zero,
               title: Text(item['name'],
                   style: const TextStyle(fontWeight: FontWeight.bold)),
-              // Added group name
               subtitle: Text("קבוצה: ${item['group']}", style: TextStyle(color: Colors.grey[700], fontSize: 11)),
               trailing: Text("$percent%",
                   style: TextStyle(
@@ -753,6 +755,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Renders a detailed bar chart mapping the efficiency trend for a specific SKU over time.
   Widget _buildEfficiencyChartForSku(
       String skuId,
       String skuName,
@@ -918,6 +921,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Distributes usage days evenly across month boundaries for chart generation.
   void _addUsageToMonths(
       DateTime start, DateTime end, Map<String, double> bucket) {
     DateTime cursor = start;
@@ -934,6 +938,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// A helper widget to render a uniform KPI stat card.
   Widget _buildStatCard(
       String title, String count, IconData icon, Color color) {
     return ConstrainedBox(
@@ -964,6 +969,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// A reusable wrapper container for alert boxes (low stock, overdue).
   Widget _buildAlertBox(
       {required Widget titleWidget,
       required Widget child,
@@ -1011,6 +1017,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// A visual component rendering a horizontal bar split proportionally 
+  /// between available and in-use equipment.
   Widget _buildWideProgressBar(int available, int inUse, int total) {
     if (total == 0) return const SizedBox();
     int inUsePercent = ((inUse / total) * 100).round();
@@ -1051,15 +1059,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // --- STATS CHART (BOTTOM) ---
+  
+  /// Calculates and builds the main statistical chart comparing acquisitions 
+  /// and lost/broken items over monthly or yearly intervals.
   Widget _buildProChartSection(List<QueryDocumentSnapshot> allDocs) {
     Map<String, double> chartData = {};
     DateTime now = DateTime.now();
     DateTime? minDate;
 
-    // ВАЖНО: Все 4 статуса потерь
+    // IMPORTANT: All 4 loss statuses must be considered here
     List<String> lossStatuses = ['broken', 'lost', 'sold', 'other'];
 
-    // 1. НАХОДИМ МИНИМАЛЬНУЮ ДАТУ
+    // 1. FIND THE MINIMUM DATE
     for (var doc in allDocs) {
       var data = doc.data() as Map<String, dynamic>;
       Timestamp? dateTs;
@@ -1069,10 +1080,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } else {
         String status = data['status'] ?? '';
         if (lossStatuses.contains(status)) {
-          // Если выбран конкретный фильтр причины потери
+          // If a specific loss reason filter is selected
           if (_chartLossReasonFilter != 'all' && status != _chartLossReasonFilter) continue;
           
-          // Берем дату удаления. Если ее нет (старый предмет) - берем дату добавления как fallback.
+          // Use deletion date. Fallback to creation date for legacy records.
           dateTs = data['dateDeleted'] ?? data['dateAdded'];
         }
       }
@@ -1085,7 +1096,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (minDate == null) minDate = now;
 
-    // 2. СОЗДАЕМ ОСИ X (Месяцы или Годы)
+    // 2. CREATE X-AXIS RANGES (Months or Years)
     List<String> allKeys = [];
     DateTime cursor = minDate;
 
@@ -1109,11 +1120,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    // 3. ЗАПОЛНЯЕМ ДАННЫЕ
+    // 3. POPULATE DATA
     for (var doc in allDocs) {
       var data = doc.data() as Map<String, dynamic>;
       
-      // Фильтры по группе и sku
       if (_chartGroupFilter != null && data['GroupID'] != _chartGroupFilter) continue;
       if (_chartSkuFilter != null && data['SKU_ID'] != _chartSkuFilter) continue;
 
@@ -1124,11 +1134,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } else {
         String status = data['status'] ?? '';
         if (lossStatuses.contains(status)) {
-          // Проверяем фильтр причины
           if (_chartLossReasonFilter != 'all' && status != _chartLossReasonFilter) continue;
           dateTs = data['dateDeleted'] ?? data['dateAdded'];
         } else {
-          continue; // Не потерянный предмет
+          continue; 
         }
       }
 
@@ -1149,7 +1158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    // 4. РИСУЕМ ГРАФИК
+    // 4. DRAW THE CHART
     List<BarChartGroupData> barGroups = [];
     double maxY = 0;
 
@@ -1274,7 +1283,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onPressed: (idx) {
                   setState(() {
                     _showAdded = idx == 0;
-                    if (_showAdded) _chartLossReasonFilter = 'all'; // Сброс при переключении
+                    if (_showAdded) _chartLossReasonFilter = 'all'; 
                   });
                 },
                 borderRadius: BorderRadius.circular(8),
@@ -1282,7 +1291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 fillColor: _showAdded ? Colors.teal : Colors.redAccent,
                 children: const [
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20), // Увеличено
+                    padding: EdgeInsets.symmetric(horizontal: 20), 
                     child: Row(children: [
                       Icon(Icons.add, size: 16),
                       SizedBox(width: 6),
@@ -1290,7 +1299,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ]),
                   ),
                   Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20), // Увеличено
+                    padding: EdgeInsets.symmetric(horizontal: 20), 
                     child: Row(children: [
                       Icon(Icons.delete, size: 16),
                       SizedBox(width: 6),
@@ -1300,7 +1309,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               
-              // НОВЫЙ ФИЛЬТР ПРИЧИН УДАЛЕНИЯ (Показывается только если выбрано יצא משימוש)
               if (!_showAdded)
                 Container(
                   height: 40,
@@ -1484,6 +1492,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- DIALOGS ---
 
+  /// Prompts the user to configure the threshold for the low stock alert.
   void _showLowStockSettingsDialog() {
     TextEditingController c =
         TextEditingController(text: _lowStockThreshold.toString());
@@ -1511,6 +1520,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ));
   }
 
+  /// Prompts the user to configure the day limit for the overdue returns alert.
   void _showOverdueSettingsDialog() {
     TextEditingController c =
         TextEditingController(text: _overdueDays.toString());
