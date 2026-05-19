@@ -50,20 +50,21 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCFYSpwUAvesle9cA6jFvbZSCEHLbP46lI',
-    appId: '1:330591949876:web:7dd48b8ca1bff38447a661',
-    messagingSenderId: '330591949876',
-    projectId: 'reot-logistic-warehouse',
-    authDomain: 'reot-logistic-warehouse.firebaseapp.com',
-    storageBucket: 'reot-logistic-warehouse.firebasestorage.app',
-    measurementId: 'G-TNYFT25VXE',
+    apiKey: 'AIzaSyC-k1-peTxSQvnBt-elL4vbryMg3j7Au0k',
+    appId: '1:377295611397:web:87b1cf23493ca0e9269e6c',
+    messagingSenderId: '377295611397',
+    projectId: 'tau-logistic-app',
+    authDomain: 'tau-logistic-app.firebaseapp.com',
+    storageBucket: 'tau-logistic-app.firebasestorage.app',
+    measurementId: 'G-Z9HT5NG0DS',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyC7e5KEDnCxTzyCJX2_GHUCELGggDlXmwU',
-    appId: '1:330591949876:android:0908e0a0368fca4f47a661',
-    messagingSenderId: '330591949876',
-    projectId: 'reot-logistic-warehouse',
-    storageBucket: 'reot-logistic-warehouse.firebasestorage.app',
+    apiKey: 'AIzaSyDAKEQXJIaF1MLnPgHxjq2j3KRHsBzHRJA',
+    appId: '1:377295611397:android:e429e384c6f1d002269e6c',
+    messagingSenderId: '377295611397',
+    projectId: 'tau-logistic-app',
+    storageBucket: 'tau-logistic-app.firebasestorage.app',
   );
+
 }

@@ -12,7 +12,10 @@ enum TimeRange { monthly, yearly }
 /// The main dashboard screen for admins displaying real-time statistics, 
 /// alerts (low stock, overdue), equipment efficiency, and historical charts.
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  // NEW: Add companyId parameter
+  final String companyId; 
+
+  const DashboardScreen({super.key, required this.companyId}); // UPDATED
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -64,11 +67,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Fetches group names and associated SKUs to populate the filter dropdowns.
+
   Future<void> _loadFiltersData() async {
-    var gSnap = await FirebaseFirestore.instance.collection('items_groups').get();
+
+    var companyRef = FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
+    var gSnap = await companyRef.collection('items_groups').get();
     for (var doc in gSnap.docs) {
       _groupNames[doc.id] = doc.data()['name'] ?? doc.id;
-      var sSnap = await FirebaseFirestore.instance
+      var sSnap = await companyRef
           .collection('SKU')
           .where('GroupID', isEqualTo: doc.id)
           .get();
@@ -86,7 +93,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('items').snapshots(),
+        // NEW: Update stream path to be specific to the company's items
+        stream: FirebaseFirestore.instance
+            .collection('companies')
+            .doc(widget.companyId)
+            .collection('items')
+            .snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -428,7 +440,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// historical usage rates for different SKUs based on their creation dates.
   Widget _buildEfficiencySection(List<QueryDocumentSnapshot> activeDocs) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('History').snapshots(),
+      // NEW: Update stream path to be specific to the company's History
+      stream: FirebaseFirestore.instance
+          .collection('companies')
+          .doc(widget.companyId)
+          .collection('History')
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SizedBox(

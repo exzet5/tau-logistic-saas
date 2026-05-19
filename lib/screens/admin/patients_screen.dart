@@ -7,7 +7,10 @@ import '../../utils/helpers.dart';
 /// Screen for managing patient data. Allows searching for a patient by ID,
 /// viewing the items they currently hold, adding new items, and returning them.
 class PatientsManagementScreen extends StatefulWidget {
-  const PatientsManagementScreen({super.key});
+  // NEW: Add companyId parameter
+  final String companyId; 
+
+  const PatientsManagementScreen({super.key, required this.companyId}); // UPDATED
 
   @override
   State<PatientsManagementScreen> createState() => _PatientsManagementScreenState();
@@ -28,6 +31,9 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
   // Cache to map GroupID to human-readable names
   Map<String, String> _groupNamesCache = {};
 
+  // NEW: Helper getter for the current company document reference
+  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
   @override
   void initState() {
     super.initState();
@@ -45,7 +51,8 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
   /// querying the DB for every single list item.
   Future<void> _loadGroupNames() async {
     try {
-      var snap = await FirebaseFirestore.instance.collection('items_groups').get();
+      // NEW: Use _companyRef
+      var snap = await _companyRef.collection('items_groups').get();
       for (var doc in snap.docs) {
         _groupNamesCache[doc.id] = (doc.data())['name'] ?? 'לא ידוע';
       }
@@ -95,7 +102,8 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
     });
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      // NEW: Use _companyRef
+      final snapshot = await _companyRef
           .collection('items')
           .where('patientId', isEqualTo: encodedTZ)
           .where('status', isEqualTo: 'in_use')
@@ -153,13 +161,15 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
       final uid = _getCurrentUserId();
       WriteBatch batch = FirebaseFirestore.instance.batch();
         
-      DocumentReference itemRef = FirebaseFirestore.instance.collection('items').doc(docId);
+      // NEW: Use _companyRef
+      DocumentReference itemRef = _companyRef.collection('items').doc(docId);
       batch.update(itemRef, {
         'status': 'available',
         'patientId': null,
       });
 
-      DocumentReference historyRef = FirebaseFirestore.instance.collection('History').doc();
+      // NEW: Use _companyRef
+      DocumentReference historyRef = _companyRef.collection('History').doc();
       batch.set(historyRef, {
         'action': 'return',
         'itemId': itemId,
@@ -190,7 +200,8 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
     Navigator.pop(context);
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      // NEW: Use _companyRef
+      final snapshot = await _companyRef
           .collection('items')
           .where('ID', isEqualTo: itemId)
           .limit(1)
@@ -260,7 +271,8 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
         'lastTaken': FieldValue.serverTimestamp(),
       });
 
-      DocumentReference historyRef = FirebaseFirestore.instance.collection('History').doc();
+      // NEW: Use _companyRef
+      DocumentReference historyRef = _companyRef.collection('History').doc();
       batch.set(historyRef, {
         'action': 'take',
         'itemId': itemId,
@@ -276,6 +288,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
       double itemCost = double.tryParse(itemData['cost']?.toString() ?? '0') ?? 0.0;
       if (itemCost > 0) {
         await PikadonLogic.addToPendingPikadon(
+          widget.companyId, // NEW: Pass the companyId here
           _currentPatientTZEncoded!, 
           itemId, 
           itemData['name'] ?? 'Unknown', 

@@ -13,7 +13,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Reuth Logistic',
+      title: 'TAU Logistic',
       debugShowCheckedModeBanner: false,
       
       localizationsDelegates: const [
@@ -58,13 +58,13 @@ class MyApp extends StatelessWidget {
             }
 
             if (snapshot.hasData) {
-              return const HomeScreen();
+              return const RoleRouter(); // ИСПРАВЛЕНО
             }
 
             if (snapshot.connectionState == ConnectionState.active && !snapshot.hasData) {
               final currentUser = FirebaseAuth.instance.currentUser;
               if (currentUser != null) {
-                return const HomeScreen();
+                return const RoleRouter(); // ИСПРАВЛЕНО
               }
             }
 

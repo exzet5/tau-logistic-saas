@@ -6,7 +6,7 @@ import 'firebase_options.dart';
 import 'app.dart';
 import 'services/update_service.dart';
 
-/// The main entry point of the Reuth Hospital Logistics Application.
+/// The main entry point of the TAU Logistic Platform.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   

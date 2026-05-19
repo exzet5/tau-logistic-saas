@@ -7,14 +7,20 @@ import 'scanner_screen.dart';
 /// providing options to take or return medical equipment.
 class UserHomeScreen extends StatelessWidget {
   final String displayName;
+  // NEW: Add companyId parameter
+  final String companyId;
 
-  const UserHomeScreen({super.key, required this.displayName});
+  const UserHomeScreen({
+    super.key, 
+    required this.displayName,
+    required this.companyId, // UPDATED
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ניהול ציוד רыפואי', style: TextStyle(color: Colors.white)),
+        title: const Text('ניהול ציוד רפואי', style: TextStyle(color: Colors.white)),
         centerTitle: true,
         backgroundColor: const Color(0xFF004D40),
         actions: [
@@ -57,7 +63,13 @@ class UserHomeScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ScannerScreen(mode: 'take')),
+                    MaterialPageRoute(
+                      // NEW: Pass companyId to ScannerScreen
+                      builder: (context) => ScannerScreen(
+                        mode: 'take', 
+                        companyId: companyId,
+                      ),
+                    ),
                   );
                 },
               ),
@@ -72,7 +84,13 @@ class UserHomeScreen extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ScannerScreen(mode: 'return')),
+                    MaterialPageRoute(
+                      // NEW: Pass companyId to ScannerScreen
+                      builder: (context) => ScannerScreen(
+                        mode: 'return', 
+                        companyId: companyId,
+                      ),
+                    ),
                   );
                 },
               ),

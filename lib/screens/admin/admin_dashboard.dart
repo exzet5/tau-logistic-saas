@@ -13,8 +13,14 @@ import 'history_screen.dart';
 /// for managing users, patients, inventory, and viewing history/deposits.
 class AdminDashboard extends StatefulWidget {
   final String displayName; 
+  // NEW: Add companyId parameter
+  final String companyId; 
   
-  const AdminDashboard({super.key, required this.displayName});
+  const AdminDashboard({
+    super.key, 
+    required this.displayName, 
+    required this.companyId // NEW
+  });
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -23,15 +29,22 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
 
-  
-  final List<Widget> _pages = [
-    const DashboardScreen(),
-    const UserManagementScreen(),
-    const PatientsManagementScreen(),
-    const ItemsManagementScreen(),
-    const PikadonScreen(),
-    const HistoryScreen(), 
-  ];
+  // NEW: Initialize _pages dynamically in initState so we can pass companyId to them
+  late final List<Widget> _pages;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pass the companyId to every screen that needs to access Firestore
+    _pages = [
+      DashboardScreen(companyId: widget.companyId),
+      UserManagementScreen(companyId: widget.companyId),
+      PatientsManagementScreen(companyId: widget.companyId),
+      ItemsManagementScreen(companyId: widget.companyId),
+      PikadonScreen(companyId: widget.companyId),
+      HistoryScreen(companyId: widget.companyId), 
+    ];
+  }
 
   /// Generates a time-appropriate greeting in Hebrew.
   String _getGreeting() {
@@ -92,7 +105,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
               
               NavigationRailDestination(
                 icon: StreamBuilder<QuerySnapshot>(
+                  // NEW: Update stream path to be specific to the company
                   stream: FirebaseFirestore.instance
+                      .collection('companies')
+                      .doc(widget.companyId)
                       .collection('Pikadon')
                       .where('status', isEqualTo: 'pending')
                       .snapshots(),

@@ -10,7 +10,10 @@ import '../../utils/helpers.dart';
 /// view a complete list of allowed users, edit their details, view activity statistics,
 /// and revoke their access (delete).
 class UserManagementScreen extends StatefulWidget {
-  const UserManagementScreen({super.key});
+  // NEW: Add companyId parameter
+  final String companyId; 
+
+  const UserManagementScreen({super.key, required this.companyId}); // UPDATED
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -92,6 +95,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
   // --- DATABASE OPERATIONS ---
 
+  // NEW: Helper getter for the current company document reference
+  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
   /// Validates inputs, creates a new allowed user record in Firestore, 
   /// and triggers a welcome email via EmailJS.
   Future<void> _addNewUser() async {
@@ -117,6 +123,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         'name': _addNameCtrl.text.trim(),
         'surname': _addSurnameCtrl.text.trim(),
         'role': _addSelectedRole,
+        // NEW: Assign the user to the specific company
+        'company_id': widget.companyId,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -200,13 +208,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     _statReturned = 0;
     _weekDayCounts = [0, 0, 0, 0, 0, 0, 0];
 
-    final snapshot = await FirebaseFirestore.instance
+    // NEW: Use _companyRef to fetch History from the specific company
+    final snapshot = await _companyRef
         .collection('History')
         .where('staffUid', isEqualTo: uid)
         .get();
 
     for (var doc in snapshot.docs) {
-      final data = doc.data();
+      final data = doc.data() as Map<String, dynamic>;
       String action = data['action'] ?? '';
       if (action == 'take') _statTaken++;
       if (action == 'return') _statReturned++;
@@ -544,11 +553,19 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         const Divider(height: 1),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('allowed_users').orderBy('name').snapshots(),
+            // NEW: Filter by company_id. OrderBy is done in memory to avoid Firebase index requirements
+            stream: FirebaseFirestore.instance
+                .collection('allowed_users')
+                .where('company_id', isEqualTo: widget.companyId)
+                .snapshots(),
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               
-              final docs = snapshot.data!.docs.where((doc) {
+              // NEW: Sort the documents manually in Dart by name
+              var allDocs = snapshot.data!.docs.toList();
+              allDocs.sort((a, b) => (a.data() as Map<String, dynamic>)['name'].toString().compareTo((b.data() as Map<String, dynamic>)['name'].toString()));
+
+              final docs = allDocs.where((doc) {
                 final d = doc.data() as Map<String, dynamic>;
                 final searchStr = "${d['name']} ${d['surname']} ${d['email']}".toLowerCase();
                 return searchStr.contains(_searchQuery);

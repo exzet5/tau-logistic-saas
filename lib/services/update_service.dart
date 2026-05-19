@@ -26,7 +26,21 @@ class UpdateService {
     }
 
     try {
-      final docRef = FirebaseFirestore.instance.collection('app_config').doc('version_info');
+      // NEW: Get user's company_id first
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (!userDoc.exists || userDoc.data()?['company_id'] == null) {
+         debugPrint("Version sync failed: User has no company assigned.");
+         return;
+      }
+      String companyId = userDoc.data()!['company_id'];
+
+      // NEW: Point to the specific company's settings
+      final docRef = FirebaseFirestore.instance
+          .collection('companies')
+          .doc(companyId)
+          .collection('system')
+          .doc('settings');
+          
       final snapshot = await docRef.get();
 
       if (snapshot.exists) {
@@ -48,7 +62,7 @@ class UpdateService {
           'required_version': AppConstants.currentAppVersion,
           'download_url': AppConstants.latestUpdateUrl,
           'updated_at': FieldValue.serverTimestamp(),
-        });
+        }, SetOptions(merge: true)); // Use merge in case other settings exist
       }
     } catch (e) {
       debugPrint("Firestore Error during sync: $e");
@@ -80,8 +94,22 @@ class _UpdateCheckerWrapperState extends State<UpdateCheckerWrapper> {
     // Skip version check on Web
     if (kIsWeb) return; 
 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     try {
-      final doc = await FirebaseFirestore.instance.collection('app_config').doc('version_info').get();
+      // NEW: Get user's company_id first
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (!userDoc.exists || userDoc.data()?['company_id'] == null) return;
+      String companyId = userDoc.data()!['company_id'];
+
+      // NEW: Point to the specific company's settings
+      final doc = await FirebaseFirestore.instance
+          .collection('companies')
+          .doc(companyId)
+          .collection('system')
+          .doc('settings')
+          .get();
       
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;

@@ -3,10 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 /// Handles inventory-related business logic, specifically the deposit (Pikadon) system.
 class PikadonLogic {
   
-  /// Adds a scanned item to a patient's pending deposit list.
+  /// Adds a scanned item to a patient's pending deposit list for a specific company.
   /// If a pending session already exists for the patient, the item is appended.
   /// Otherwise, a new pending deposit record is created.
   static Future<void> addToPendingPikadon(
+      // NEW: Added companyId
+      String companyId, 
       String patientId, 
       String itemId, 
       String itemName, 
@@ -14,7 +16,13 @@ class PikadonLogic {
       double cost, 
       String? staffUid) async {
       
-    var existingDocs = await FirebaseFirestore.instance.collection('Pikadon')
+    // NEW: Pointing to the specific company's subcollection
+    CollectionReference pikadonCollection = FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .collection('Pikadon');
+
+    var existingDocs = await pikadonCollection
         .where('patientId', isEqualTo: patientId)
         .where('status', isEqualTo: 'pending')
         .get();
@@ -23,7 +31,7 @@ class PikadonLogic {
 
     if (existingDocs.docs.isNotEmpty) {
       var doc = existingDocs.docs.first;
-      var data = doc.data();
+      var data = doc.data() as Map<String, dynamic>; // Added cast for safety
       List items = List.from(data['items'] ?? []);
       
       bool exists = items.any((i) => i['itemId'] == itemId);
@@ -42,7 +50,7 @@ class PikadonLogic {
         });
       }
     } else {
-      batch.set(FirebaseFirestore.instance.collection('Pikadon').doc(), {
+      batch.set(pikadonCollection.doc(), {
         'patientId': patientId,
         'status': 'pending',
         'totalCost': cost,

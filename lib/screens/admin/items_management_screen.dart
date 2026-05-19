@@ -9,7 +9,10 @@ import '../../services/pdf_service.dart';
 /// Screen for managing inventory items, including listing, creating new items,
 /// managing item groups/SKUs, and generating printable PDF barcodes.
 class ItemsManagementScreen extends StatefulWidget {
-  const ItemsManagementScreen({super.key});
+  // NEW: Add companyId parameter
+  final String companyId; 
+
+  const ItemsManagementScreen({super.key, required this.companyId}); // UPDATED
 
   @override
   State<ItemsManagementScreen> createState() => _ItemsManagementScreenState();
@@ -111,7 +114,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
   /// Fetches the cost associated with a specific SKU to pre-fill the cost input field.
   Future<void> _fetchCostForSku(String skuId) async {
     try {
-      var snap = await FirebaseFirestore.instance.collection('items').where('SKU_ID', isEqualTo: skuId).get();
+      // NEW: Use _companyRef
+      var snap = await _companyRef.collection('items').where('SKU_ID', isEqualTo: skuId).get();
       for (var doc in snap.docs) {
         var data = doc.data() as Map<String, dynamic>;
         if (data['cost'] != null) {
@@ -144,9 +148,11 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     }
   }
 
-  Stream<QuerySnapshot> _getGroupsStream() => FirebaseFirestore.instance.collection('items_groups').snapshots();
-  Stream<QuerySnapshot> _getSkusStream(String groupId) => FirebaseFirestore.instance.collection('SKU').where('GroupID', isEqualTo: groupId).snapshots();
+  // NEW: Helper getter for the current company document reference
+  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
 
+  Stream<QuerySnapshot> _getGroupsStream() => _companyRef.collection('items_groups').snapshots();
+  Stream<QuerySnapshot> _getSkusStream(String groupId) => _companyRef.collection('SKU').where('GroupID', isEqualTo: groupId).snapshots();
   /// Marks a specific item as deleted (assigning a loss reason) and updates the History log.
   Future<void> _deleteItem(String docId, String itemName, String currentStatus, String itemId) async {
     String selectedReason = 'broken'; 
@@ -197,13 +203,15 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     if (confirm == true) {
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       
-      await FirebaseFirestore.instance.collection('items').doc(docId).update({
+      // NEW: Use _companyRef
+      await _companyRef.collection('items').doc(docId).update({
         'status': selectedReason, 
         'dateDeleted': FieldValue.serverTimestamp(),
         'patientId': null, 
       });
 
-      await FirebaseFirestore.instance.collection('History').add({
+      // NEW: Use _companyRef
+      await _companyRef.collection('History').add({
         'action': selectedReason,
         'itemId': itemId,
         'itemName': itemName,
@@ -285,7 +293,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       Map<String, dynamic> updates = {};
                       
                       if (idCtrl.text.trim() != data['ID']) {
-                        final check = await FirebaseFirestore.instance.collection('items').where('ID', isEqualTo: idCtrl.text.trim()).get();
+                        // NEW: Use _companyRef
+                        final check = await _companyRef.collection('items').where('ID', isEqualTo: idCtrl.text.trim()).get();
                         if (check.docs.isNotEmpty) { 
                           _hideLoadingDialog(); 
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("שגיאה: ID זה כבר קיים"), backgroundColor: Colors.red));
@@ -306,7 +315,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       if (newCost != null) {
                         updates['cost'] = newCost; 
                         if (targetSkuId != null && targetSkuId.isNotEmpty) {
-                          var existingItems = await FirebaseFirestore.instance.collection('items').where('SKU_ID', isEqualTo: targetSkuId).get();
+                          // NEW: Use _companyRef
+                          var existingItems = await _companyRef.collection('items').where('SKU_ID', isEqualTo: targetSkuId).get();
                           for (var itemDoc in existingItems.docs) {
                             if (itemDoc.id != doc.id) {
                               batch.update(itemDoc.reference, {'cost': newCost});
@@ -366,7 +376,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             ElevatedButton(
               onPressed: () async {
                 if (ctrl.text.isNotEmpty) {
-                  await FirebaseFirestore.instance.collection('items_groups').add({'name': ctrl.text.trim()});
+                  // NEW: Use _companyRef
+                  await _companyRef.collection('items_groups').add({'name': ctrl.text.trim()});
                   if (mounted) Navigator.pop(ctx);
                 }
               }, 
@@ -399,7 +410,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             ElevatedButton(
               onPressed: () async {
                 if (ctrl.text.isNotEmpty) {
-                  DocumentReference ref = await FirebaseFirestore.instance.collection('SKU').add({'name': ctrl.text.trim(), 'GroupID': currentGroupId});
+                  // NEW: Use _companyRef
+                  DocumentReference ref = await _companyRef.collection('SKU').add({'name': ctrl.text.trim(), 'GroupID': currentGroupId});
                   if (preselectedGroupId == null) {
                      setState(() { 
                        _selectedSkuForAdd = {'id': ref.id, 'name': ctrl.text.trim()}; 
@@ -438,7 +450,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             ElevatedButton(
               onPressed: () async {
                 if (ctrl.text.isNotEmpty) {
-                  await FirebaseFirestore.instance.collection(collection).doc(docId).update({'name': ctrl.text.trim()});
+                  // NEW: Use _companyRef
+                  await _companyRef.collection(collection).doc(docId).update({'name': ctrl.text.trim()});
                   Navigator.pop(ctx);
                 }
               }, 
@@ -457,7 +470,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     String currentGroupName = 'טוען...';
     
     try {
-      var gDoc = await FirebaseFirestore.instance.collection('items_groups').doc(currentGroupId).get();
+      // NEW: Use _companyRef
+      var gDoc = await _companyRef.collection('items_groups').doc(currentGroupId).get();
       if (gDoc.exists) {
         currentGroupName = gDoc.data()?['name'] ?? 'Unknown';
       }
@@ -509,7 +523,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       _showLoadingDialog();
                       try {
                         WriteBatch batch = FirebaseFirestore.instance.batch();
-                        DocumentReference skuRef = FirebaseFirestore.instance.collection('SKU').doc(skuId);
+                        // NEW: Use _companyRef
+                        DocumentReference skuRef = _companyRef.collection('SKU').doc(skuId);
                         Map<String, dynamic> updates = {'name': nameCtrl.text.trim()};
                         
                         bool groupChanged = selectedNewGroup != null && selectedNewGroup!['id'] != currentGroupId;
@@ -519,7 +534,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                         batch.update(skuRef, updates);
 
                         if (nameCtrl.text.trim() != currentName || groupChanged) {
-                          var items = await FirebaseFirestore.instance.collection('items').where('SKU_ID', isEqualTo: skuId).get();
+                          // NEW: Use _companyRef
+                          var items = await _companyRef.collection('items').where('SKU_ID', isEqualTo: skuId).get();
                           for (var doc in items.docs) {
                             Map<String, dynamic> itemUpdates = {};
                             if (nameCtrl.text.trim() != currentName) {
@@ -561,7 +577,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
   Future<void> _deleteGroupOrSku(String collection, String docId, String name, {bool isGroup = false}) async {
     _showLoadingDialog();
     try {
-      Query query = FirebaseFirestore.instance.collection('items');
+      // NEW: Use _companyRef
+      Query query = _companyRef.collection('items');
       if (isGroup) {
         query = query.where('GroupID', isEqualTo: docId);
       } else {
@@ -577,7 +594,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
       }).toList();
 
       if (isGroup) {
-        var skusInGroup = await FirebaseFirestore.instance.collection('SKU').where('GroupID', isEqualTo: docId).get();
+        // NEW: Use _companyRef
+        var skusInGroup = await _companyRef.collection('SKU').where('GroupID', isEqualTo: docId).get();
         if (skusInGroup.docs.isNotEmpty) {
           _hideLoadingDialog();
           if (!mounted) return;
@@ -660,7 +678,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
           }
         }
         
-        batch.delete(FirebaseFirestore.instance.collection(collection).doc(docId));
+        // NEW: Use _companyRef
+        batch.delete(_companyRef.collection(collection).doc(docId));
         await batch.commit();
         
         _hideLoadingDialog();
@@ -686,7 +705,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     _showLoadingDialog();
     
     try {
-      final systemRef = FirebaseFirestore.instance.collection('system').doc('settings');
+      // NEW: System settings are now specific to the company
+      final systemRef = _companyRef.collection('system').doc('settings');
       List<String> newBarcodes = [];
 
       await FirebaseFirestore.instance.runTransaction((transaction) async {
@@ -706,7 +726,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
       for (String id in newBarcodes) {
-        batch.set(FirebaseFirestore.instance.collection('items').doc(), {
+        // NEW: Use _companyRef
+        batch.set(_companyRef.collection('items').doc(), {
           'ID': id, 
           'GroupID': _selectedGroupForAdd!['id'], 
           'SKU_ID': _selectedSkuForAdd!['id'], 
@@ -717,7 +738,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
         });
       }
 
-      var existingItems = await FirebaseFirestore.instance.collection('items').where('SKU_ID', isEqualTo: _selectedSkuForAdd!['id']).get();
+      // NEW: Use _companyRef
+      var existingItems = await _companyRef.collection('items').where('SKU_ID', isEqualTo: _selectedSkuForAdd!['id']).get();
       for (var doc in existingItems.docs) {
         batch.update(doc.reference, {'cost': cost});
       }
@@ -874,7 +896,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
           children: [
             // --- TAB 1: LIST ---
             StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('items_groups').snapshots(),
+              // NEW: Use _companyRef
+              stream: _companyRef.collection('items_groups').snapshots(),
               builder: (context, groupsSnapshot) {
                 Map<String, String> groupNamesMap = {};
                 if (groupsSnapshot.hasData) {
@@ -884,7 +907,8 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                 }
 
                 return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('items').snapshots(),
+                  // NEW: Use _companyRef
+                  stream: _companyRef.collection('items').snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -1364,7 +1388,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                   const Divider(thickness: 1, height: 30),
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance.collection('items').snapshots(),
+                      stream: _companyRef.collection('items').snapshots(),
                       builder: (ctx, itemSnapshot) {
                         if (!itemSnapshot.hasData) return const Center(child: CircularProgressIndicator());
                         var allItems = itemSnapshot.data!.docs;

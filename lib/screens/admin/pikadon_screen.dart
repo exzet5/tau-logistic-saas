@@ -12,7 +12,10 @@ import '../../services/excel_service.dart';
 /// Includes tabs for Pending deposits, Active deposits, and Deposit History.
 /// Features Excel exports and PDF generation for patient signatures.
 class PikadonScreen extends StatefulWidget {
-  const PikadonScreen({super.key});
+  // NEW: Add companyId parameter
+  final String companyId;
+
+  const PikadonScreen({super.key, required this.companyId}); // UPDATED
 
   @override
   State<PikadonScreen> createState() => _PikadonScreenState();
@@ -57,17 +60,25 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     super.dispose();
   }
 
+  // NEW: Helper getter for the current company document reference
+  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
   /// Loads users and item groups into local memory to avoid repetitive DB calls.
   Future<void> _loadAuxiliaryData() async {
     try {
-      var usersSnap = await FirebaseFirestore.instance.collection('users').get();
+      // NEW: Filter users by company_id
+      var usersSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('company_id', isEqualTo: widget.companyId)
+          .get();
       for (var doc in usersSnap.docs) {
         var data = doc.data();
         String name = data['displayName'] ?? data['name'] ?? 'Unknown';
         _usersCache[doc.id] = name;
       }
 
-      var groupsSnap = await FirebaseFirestore.instance.collection('items_groups').get();
+      // NEW: Use _companyRef for items_groups
+      var groupsSnap = await _companyRef.collection('items_groups').get();
       for (var doc in groupsSnap.docs) {
         _groupNamesCache[doc.id] = (doc.data())['name'] ?? doc.id;
       }
@@ -536,7 +547,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       final uid = FirebaseAuth.instance.currentUser?.uid;
 
       void processPikadon(List groupItems, double groupCost, String statusType) {
-        batch.set(FirebaseFirestore.instance.collection('Pikadon').doc(), {
+        // NEW: Use _companyRef
+        batch.set(_companyRef.collection('Pikadon').doc(), {
           'patientId': patientId,
           'status': statusType,
           'totalCost': groupCost,
@@ -565,7 +577,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       if (itemsToMarkBroken.isNotEmpty) {
         Map<String, DocumentReference> itemRefs = {};
         for (var item in itemsToMarkBroken) {
-          var snap = await FirebaseFirestore.instance.collection('items').where('ID', isEqualTo: item['itemId']).limit(1).get();
+          // NEW: Use _companyRef
+          var snap = await _companyRef.collection('items').where('ID', isEqualTo: item['itemId']).limit(1).get();
           if (snap.docs.isNotEmpty) itemRefs[item['itemId'].toString()] = snap.docs.first.reference;
         }
 
@@ -579,7 +592,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
             });
           }
           
-          batch.set(FirebaseFirestore.instance.collection('History').doc(), {
+          // NEW: Use _companyRef
+          batch.set(_companyRef.collection('History').doc(), {
              'action': selectedReasonForInventory, 
              'itemId': idStr,
              'itemName': item['itemName'] ?? 'Unknown',
@@ -794,7 +808,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   // ================= TAB 1: PENDING =================
   Widget _buildPendingTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('Pikadon')
+      // NEW: Use _companyRef
+      stream: _companyRef.collection('Pikadon')
           .where('status', isEqualTo: 'pending')
           .orderBy('createdAt', descending: true)
           .snapshots(),
@@ -966,15 +981,17 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   // ================= TAB 2: ACTIVE =================
   Widget _buildActiveTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('Pikadon')
+      // NEW: Use _companyRef
+      stream: _companyRef.collection('Pikadon')
           .where('status', isEqualTo: 'active')
           .orderBy('actionDate', descending: true)
           .snapshots(),
       builder: (context, pikadonSnapshot) {
         if (!pikadonSnapshot.hasData) return const Center(child: CircularProgressIndicator());
-        
+
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('items').snapshots(),
+          // NEW: Use _companyRef for items as well
+          stream: _companyRef.collection('items').snapshots(),
           builder: (context, itemsSnapshot) {
             if (!itemsSnapshot.hasData) return const Center(child: CircularProgressIndicator());
 
@@ -1116,7 +1133,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                 const Divider(),
                                 const Text("סטטוס פריטים נוכחי:", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 8),
-                                
                                 Wrap(
                                   spacing: 8,
                                   runSpacing: 8,
@@ -1145,7 +1161,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                   }).toList(),
                                 ),
                                 const SizedBox(height: 15),
-                                
                                 Row(
                                   children: [
                                     ElevatedButton.icon(
@@ -1171,11 +1186,11 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                           ),
                         );
                       },
-                  ),
+                    ),
                 )
               ],
             );
-          }
+          },
         );
       },
     );
@@ -1184,7 +1199,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   // ================= TAB 3: HISTORY =================
   Widget _buildHistoryTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('Pikadon')
+      // NEW: Use _companyRef
+      stream: _companyRef.collection('Pikadon')
           .where('status', whereIn: ['active', 'returned', 'no_deposit', 'forfeited'])
           .snapshots(),
       builder: (context, snapshot) {
@@ -1465,4 +1481,9 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       ),
     );
   }
+
+ 
+
+
+  
 }

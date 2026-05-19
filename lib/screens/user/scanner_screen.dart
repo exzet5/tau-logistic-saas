@@ -10,8 +10,10 @@ import '../../services/security_service.dart';
 /// Supports both camera scanning and manual barcode entry.
 class ScannerScreen extends StatefulWidget {
   final String mode;
+  // NEW: Add companyId parameter
+  final String companyId; 
 
-  const ScannerScreen({super.key, required this.mode});
+  const ScannerScreen({super.key, required this.mode, required this.companyId}); // UPDATED
 
   @override
   State<ScannerScreen> createState() => _ScannerScreenState();
@@ -50,6 +52,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     super.dispose();
   }
 
+  // NEW: Helper getter for the current company document reference
+  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
   /// Fetches the group name from the item data or from the 'items_groups' collection.
   Future<String> _getGroupName(Map<String, dynamic> data) async {
     if (data.containsKey('group') && data['group'] != null && data['group'].toString().isNotEmpty) {
@@ -58,7 +63,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
     String gId = data['GroupID'] ?? '';
     if (gId.isEmpty) return 'לא הוגדר';
     try {
-      var doc = await FirebaseFirestore.instance.collection('items_groups').doc(gId).get();
+      // NEW: Use _companyRef
+      var doc = await _companyRef.collection('items_groups').doc(gId).get();
       if (doc.exists) return (doc.data() as Map<String, dynamic>)['name'] ?? 'לא הוגדר';
     } catch (_) {}
     return 'לא הוגדר';
@@ -189,7 +195,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
       barrierDismissible: false,
       builder: (ctx) {
         return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('items_groups').snapshots(),
+          // NEW: Use _companyRef
+          stream: _companyRef.collection('items_groups').snapshots(),
           builder: (context, snapshot) {
             Map<String, String> groupNamesMap = {};
             if (snapshot.hasData) {
@@ -275,7 +282,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
         final itemData = doc.data() as Map<String, dynamic>;
         String groupName = itemData['group'] ?? groupNamesMap[itemData['GroupID']] ?? 'לא הוגדר';
 
-        final historyRef = FirebaseFirestore.instance.collection('History').doc();
+        // NEW: Use _companyRef
+        final historyRef = _companyRef.collection('History').doc();
         batch.set(historyRef, {
           'itemId': itemData['ID'],
           'itemName': itemData['name'],
@@ -296,6 +304,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
         if (itemCost > 0) {
           await PikadonLogic.addToPendingPikadon(
+            widget.companyId, // NEW: Pass the companyId here as the first argument
             encryptedPatientId, 
             itemData['ID'].toString(), 
             itemData['name'] ?? 'Unknown', 
@@ -317,7 +326,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
   /// Looks up an item in Firestore using its barcode.
   Future<DocumentSnapshot?> _findItemSnapshot(String barcode) async {
     try {
-      final querySnapshot = await FirebaseFirestore.instance
+      // NEW: Use _companyRef
+      final querySnapshot = await _companyRef
           .collection('items')
           .where('ID', isEqualTo: barcode)
           .limit(1)
@@ -503,7 +513,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
         'patientId': null,
       });
 
-      final historyRef = FirebaseFirestore.instance.collection('History').doc();
+      // NEW: Use _companyRef
+      final historyRef = _companyRef.collection('History').doc();
       batch.set(historyRef, {
         'itemId': iId,
         'itemName': itemName,
@@ -834,8 +845,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     String realPid = SecurityService.decryptID(encryptedPid);
 
     return StreamBuilder<DocumentSnapshot>(
+      // NEW: Use _companyRef
       stream: groupId.isNotEmpty 
-          ? FirebaseFirestore.instance.collection('items_groups').doc(groupId).snapshots()
+          ? _companyRef.collection('items_groups').doc(groupId).snapshots()
           : null,
       builder: (context, snapshot) {
         String groupName = data['group'] ?? 'טוען...';

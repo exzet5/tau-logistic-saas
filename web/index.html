@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <base href="/">
 
@@ -9,28 +10,30 @@
 
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="Reuth Logistic">
+  <meta name="apple-mobile-web-app-title" content="TAU Logistic">
   <link rel="apple-touch-icon" href="icon.png">
 
-  <link rel="icon" type="image/png" href="icon.png"/>
+  <link rel="icon" type="image/png" href="icon.png" />
 
-  <title>Reuth Logistic</title>
+  <title>TAU Logistic</title>
   <link rel="manifest" href="manifest.json">
-  
+
   <meta name="theme-color" content="#004D40">
 
   <script src="https://unpkg.com/@zxing/library@0.19.1" type="application/javascript"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 </head>
+
 <body>
   <script src="flutter_bootstrap.js" async></script>
-  
+
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function() {
+      window.addEventListener('load', function () {
         navigator.serviceWorker.register('flutter_service_worker.js?v=' + new Date().getTime());
       });
     }
   </script>
 </body>
+
 </html>

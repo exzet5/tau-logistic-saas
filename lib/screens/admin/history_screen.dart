@@ -8,7 +8,10 @@ import '../../services/security_service.dart';
 /// Screen displaying the complete audit log of all equipment actions (take, return, lost, etc.).
 /// Provides advanced filtering capabilities by date, action type, user, patient, and SKU.
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  // NEW: Add companyId parameter
+  final String companyId; 
+
+  const HistoryScreen({super.key, required this.companyId}); // UPDATED
 
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
@@ -51,21 +54,29 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _loadAuxiliaryData() async {
     try {
       // 1. Load users for displaying staff names instead of UIDs
-      var usersSnap = await FirebaseFirestore.instance.collection('users').get();
+      // NEW: Filter users by company_id so we don't load users from other companies
+      var usersSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('company_id', isEqualTo: widget.companyId)
+          .get();
+          
       for (var doc in usersSnap.docs) {
         var data = doc.data();
         String name = data['displayName']?.toString() ?? data['name']?.toString() ?? 'Unknown';
         _usersCache[doc.id] = name;
       }
 
+      // NEW: Define the specific company reference
+      var companyRef = FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
       // 2. Load group names to resolve GroupIDs
-      var groupsSnap = await FirebaseFirestore.instance.collection('items_groups').get();
+      var groupsSnap = await companyRef.collection('items_groups').get();
       for (var doc in groupsSnap.docs) {
         _groupNamesCache[doc.id] = (doc.data())['name']?.toString() ?? doc.id;
       }
 
       // 3. Load items to resolve item details based on ID
-      var itemsSnap = await FirebaseFirestore.instance.collection('items').get();
+      var itemsSnap = await companyRef.collection('items').get();
       for (var doc in itemsSnap.docs) {
         var data = doc.data();
         String id = data['ID']?.toString() ?? doc.id;
@@ -163,9 +174,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Stream<QuerySnapshot> _getGroupsStream() => FirebaseFirestore.instance.collection('items_groups').snapshots();
-  Stream<QuerySnapshot> _getSkusStream(String groupId) => FirebaseFirestore.instance.collection('SKU').where('GroupID', isEqualTo: groupId).snapshots();
+  // NEW: Update paths to be specific to the company
+  Stream<QuerySnapshot> _getGroupsStream() => FirebaseFirestore.instance
+      .collection('companies')
+      .doc(widget.companyId)
+      .collection('items_groups')
+      .snapshots();
 
+  Stream<QuerySnapshot> _getSkusStream(String groupId) => FirebaseFirestore.instance
+      .collection('companies')
+      .doc(widget.companyId)
+      .collection('SKU')
+      .where('GroupID', isEqualTo: groupId)
+      .snapshots();
   /// Builds an autocomplete dropdown selector for filtering groups or SKUs.
   Widget _buildFilterSelector({required String label, required Stream<QuerySnapshot> stream, required Function(Map<String, dynamic>?) onSelected, required String? selectedName}) {
     return StreamBuilder<QuerySnapshot>(
@@ -313,7 +334,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance.collection('History').orderBy('timestamp', descending: true).snapshots(),
+                
+                stream: FirebaseFirestore.instance
+                    .collection('companies')
+                    .doc(widget.companyId)
+                    .collection('History')
+                    .orderBy('timestamp', descending: true)
+                    .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) return Center(child: Text("שגיאה: ${snapshot.error}", textDirection: TextDirection.ltr));
                   if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
