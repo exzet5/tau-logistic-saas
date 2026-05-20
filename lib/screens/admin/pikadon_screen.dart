@@ -10,12 +10,10 @@ import '../../services/excel_service.dart';
 
 /// Screen for managing patient deposits (Pikadon).
 /// Includes tabs for Pending deposits, Active deposits, and Deposit History.
-/// Features Excel exports and PDF generation for patient signatures.
 class PikadonScreen extends StatefulWidget {
-  // NEW: Add companyId parameter
   final String companyId;
 
-  const PikadonScreen({super.key, required this.companyId}); // UPDATED
+  const PikadonScreen({super.key, required this.companyId}); 
 
   @override
   State<PikadonScreen> createState() => _PikadonScreenState();
@@ -39,8 +37,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   String _historyTypeFilter = 'all';
 
   bool _isProcessing = false;
-
   bool _isLoadingData = true;
+  
   Map<String, String> _usersCache = {};
   Map<String, String> _groupNamesCache = {}; 
 
@@ -60,13 +58,10 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     super.dispose();
   }
 
-  // NEW: Helper getter for the current company document reference
   DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
 
-  /// Loads users and item groups into local memory to avoid repetitive DB calls.
   Future<void> _loadAuxiliaryData() async {
     try {
-      // NEW: Filter users by company_id
       var usersSnap = await FirebaseFirestore.instance
           .collection('users')
           .where('company_id', isEqualTo: widget.companyId)
@@ -77,7 +72,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         _usersCache[doc.id] = name;
       }
 
-      // NEW: Use _companyRef for items_groups
       var groupsSnap = await _companyRef.collection('items_groups').get();
       for (var doc in groupsSnap.docs) {
         _groupNamesCache[doc.id] = (doc.data())['name'] ?? doc.id;
@@ -98,7 +92,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  /// Converts a raw Group ID into a human-readable group name.
   String _getReadableGroupName(String rawGroup) {
     if (rawGroup.isEmpty) return 'לא הוגדר';
     if (rawGroup.length == 20 && !rawGroup.contains(' ')) {
@@ -107,7 +100,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     return rawGroup;
   }
 
-  /// Displays a non-dismissible loading overlay.
   void _showLoading() {
     setState(() => _isProcessing = true);
     showDialog(
@@ -117,13 +109,28 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     );
   }
 
-  /// Hides the loading overlay.
   void _hideLoading() {
     setState(() => _isProcessing = false);
     if (Navigator.canPop(context)) Navigator.pop(context);
   }
 
-  /// Opens a calendar dialog to select a date range for filtering.
+  // --- REUSABLE EMPTY STATE WIDGET ---
+  /// Builds a beautiful empty state UI matching the Patients screen design.
+  Widget _buildEmptyState(IconData icon, String title, {Color color = Colors.grey}) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 80, color: color.withOpacity(0.8)),
+        const SizedBox(height: 15),
+        Text(
+          title, 
+          style: TextStyle(fontSize: 20, color: color, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
   Future<void> _showDateRangePicker(int tabIndex) async {
     final config = CalendarDatePicker2WithActionButtonsConfig(
       calendarType: CalendarDatePicker2Type.range,
@@ -156,7 +163,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  /// Applies quick date filters (Today, Yesterday, This Month, etc.).
   void _setQuickDate(int tabIndex, String filterType) {
     DateTime now = DateTime.now();
     DateTime start;
@@ -189,10 +195,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     });
   }
 
-
-
-
-  /// Approves an item handover without requiring a monetary deposit.
   Future<void> _approveWithoutDeposit(String docId) async {
     TextEditingController reasonCtrl = TextEditingController();
     bool? confirm = await showDialog(
@@ -218,7 +220,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     );
 
     if (confirm == true) {
-      await FirebaseFirestore.instance.collection('Pikadon').doc(docId).update({
+      await _companyRef.collection('Pikadon').doc(docId).update({
         'status': 'no_deposit',
         'reason': reasonCtrl.text.trim(),
         'actionDate': FieldValue.serverTimestamp(),
@@ -226,7 +228,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  /// Processes a pending deposit and moves it to the 'active' state, recording the payment method.
   Future<void> _takeDeposit(String docId, double amount, String patientId, List pendingItems) async {
     String selectedMethod = 'card'; 
 
@@ -282,7 +283,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
     _showLoading();
     try {
-      var activeSnap = await FirebaseFirestore.instance.collection('Pikadon')
+      var activeSnap = await _companyRef.collection('Pikadon')
           .where('status', isEqualTo: 'active')
           .where('patientId', isEqualTo: patientId)
           .get();
@@ -317,7 +318,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
           'paymentMethod': selectedMethod, 
         });
         
-        batch.delete(FirebaseFirestore.instance.collection('Pikadon').doc(docId));
+        batch.delete(_companyRef.collection('Pikadon').doc(docId));
       } else {
         List cleanItems = [];
         double cleanCost = 0.0;
@@ -332,7 +333,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
           }
         }
 
-        batch.update(FirebaseFirestore.instance.collection('Pikadon').doc(docId), {
+        batch.update(_companyRef.collection('Pikadon').doc(docId), {
           'status': 'active',
           'actionDate': FieldValue.serverTimestamp(),
           'items': cleanItems,
@@ -347,7 +348,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  /// Handles partial deposit returns or forfeitures when a patient returns only some of their items.
   Future<void> _handlePartialAction(DocumentSnapshot doc, String actionType, Map<String, String?> itemPatientMap) async {
     var data = doc.data() as Map<String, dynamic>;
     List items = List.from(data['items'] ?? []);
@@ -547,7 +547,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       final uid = FirebaseAuth.instance.currentUser?.uid;
 
       void processPikadon(List groupItems, double groupCost, String statusType) {
-        // NEW: Use _companyRef
         batch.set(_companyRef.collection('Pikadon').doc(), {
           'patientId': patientId,
           'status': statusType,
@@ -577,7 +576,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       if (itemsToMarkBroken.isNotEmpty) {
         Map<String, DocumentReference> itemRefs = {};
         for (var item in itemsToMarkBroken) {
-          // NEW: Use _companyRef
           var snap = await _companyRef.collection('items').where('ID', isEqualTo: item['itemId']).limit(1).get();
           if (snap.docs.isNotEmpty) itemRefs[item['itemId'].toString()] = snap.docs.first.reference;
         }
@@ -592,7 +590,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
             });
           }
           
-          // NEW: Use _companyRef
           batch.set(_companyRef.collection('History').doc(), {
              'action': selectedReasonForInventory, 
              'itemId': idStr,
@@ -615,8 +612,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  // ================= EXCEL EXPORT (ACTIVE) =================
-  /// Delegates generation and downloading of Active Deposits to ExcelService.
   Future<void> _exportActiveToExcel(List<QueryDocumentSnapshot> docs) async {
     if (docs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("אין נתונים לייצוא")));
@@ -672,8 +667,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  // ================= EXCEL EXPORT (HISTORY) =================
-  /// Delegates generation and downloading of Historical Deposits to ExcelService.
   Future<void> _exportHistoryToExcel(List<Map<String, dynamic>> events) async {
     if (events.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("אין נתונים לייצוא")));
@@ -740,9 +733,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-
-  // ================= PDF GENERATION (SIGNATURE) =================
-  /// Delegates generation and downloading of the Deposit Agreement Form to PdfService.
   Future<void> _generateAndDownloadPdf(String patientId, List items, double totalCost, String staffName) async {
     _showLoading();
     try {
@@ -808,13 +798,20 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   // ================= TAB 1: PENDING =================
   Widget _buildPendingTab() {
     return StreamBuilder<QuerySnapshot>(
-      // NEW: Use _companyRef
       stream: _companyRef.collection('Pikadon')
           .where('status', isEqualTo: 'pending')
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        // --- CUSTOM ERROR / EMPTY STATE ---
+        if (snapshot.hasError) {
+          debugPrint("Firestore Index Error: ${snapshot.error}");
+          return _buildEmptyState(Icons.settings_suggest, "נדרשת הגדרה (Index) במסד הנתונים\nראה קונסולה למפתח", color: Colors.orange);
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
         var docs = snapshot.data!.docs;
 
         var filteredDocs = docs.where((doc) {
@@ -843,7 +840,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
             
             Expanded(
               child: filteredDocs.isEmpty 
-              ? const Center(child: Text("אין הודעות חדשות", style: TextStyle(fontSize: 20, color: Colors.grey)))
+              ? _buildEmptyState(Icons.notifications_none, "אין הודעות חדשות כרגע")
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 80),
                   itemCount: filteredDocs.length,
@@ -960,7 +957,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     );
   }
 
-  /// Builds a summary column widget for active deposits (e.g., total cash, total card).
   Widget _buildSumCol(String title, double amount, Color color, IconData icon) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -981,19 +977,29 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   // ================= TAB 2: ACTIVE =================
   Widget _buildActiveTab() {
     return StreamBuilder<QuerySnapshot>(
-      // NEW: Use _companyRef
       stream: _companyRef.collection('Pikadon')
           .where('status', isEqualTo: 'active')
           .orderBy('actionDate', descending: true)
           .snapshots(),
       builder: (context, pikadonSnapshot) {
-        if (!pikadonSnapshot.hasData) return const Center(child: CircularProgressIndicator());
+        // --- CUSTOM ERROR / EMPTY STATE ---
+        if (pikadonSnapshot.hasError) {
+          debugPrint("Firestore Index Error: ${pikadonSnapshot.error}");
+          return _buildEmptyState(Icons.settings_suggest, "נדרשת הגדרה (Index) במסד הנתונים\nראה קונסולה למפתח", color: Colors.orange);
+        }
+        if (pikadonSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
         return StreamBuilder<QuerySnapshot>(
-          // NEW: Use _companyRef for items as well
           stream: _companyRef.collection('items').snapshots(),
           builder: (context, itemsSnapshot) {
-            if (!itemsSnapshot.hasData) return const Center(child: CircularProgressIndicator());
+            if (itemsSnapshot.hasError) {
+              return Center(child: Text("שגיאה בטעינת פריטים: ${itemsSnapshot.error}", style: const TextStyle(color: Colors.red)));
+            }
+            if (itemsSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
             Map<String, String?> itemPatientMap = {};
             for(var itemDoc in itemsSnapshot.data!.docs) {
@@ -1077,7 +1083,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                 
                 Expanded(
                   child: filteredDocs.isEmpty 
-                  ? const Center(child: Text("לא נמצאו פיקדונות פעילים"))
+                  ? _buildEmptyState(Icons.account_balance_wallet_outlined, "אין פיקדונות פעילים כרגע")
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 20, 20, 80),
                       itemCount: filteredDocs.length,
@@ -1199,12 +1205,18 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
   // ================= TAB 3: HISTORY =================
   Widget _buildHistoryTab() {
     return StreamBuilder<QuerySnapshot>(
-      // NEW: Use _companyRef
       stream: _companyRef.collection('Pikadon')
           .where('status', whereIn: ['active', 'returned', 'no_deposit', 'forfeited'])
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        // --- CUSTOM ERROR / EMPTY STATE ---
+        if (snapshot.hasError) {
+          debugPrint("Firestore Index Error: ${snapshot.error}");
+          return _buildEmptyState(Icons.settings_suggest, "נדרשת הגדרה (Index) במסד הנתונים\nראה קונסולה למפתח", color: Colors.orange);
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
         
         List<Map<String, dynamic>> allEvents = [];
         
@@ -1285,7 +1297,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
             
             Expanded(
               child: filteredEvents.isEmpty 
-              ? const Center(child: Text("לא נמצאה היסטוריה"))
+              ? _buildEmptyState(Icons.history, "אין היסטוריית פעולות להצגה")
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 80),
                   itemCount: filteredEvents.length,
@@ -1481,9 +1493,4 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       ),
     );
   }
-
- 
-
-
-  
 }

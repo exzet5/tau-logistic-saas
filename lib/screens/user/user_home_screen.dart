@@ -20,7 +20,7 @@ class UserHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ניהול ציוד רפואי', style: TextStyle(color: Colors.white)),
+        title: const Text('ניהול ציוד ', style: TextStyle(color: Colors.white)),
         centerTitle: true,
         backgroundColor: const Color(0xFF004D40),
         actions: [

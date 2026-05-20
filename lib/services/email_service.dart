@@ -11,7 +11,7 @@ class EmailService {
   
   // App links for welcome emails
   static const String _apkLink = 'https://drive.google.com/file/d/1qDLI0zx13iCYcIKTB_rDXXc6cDIG5b-t/view?usp=sharing';
-  static const String _webLink = 'https://reot-logistic-warehouse.web.app/';
+  static const String _webLink = 'https://tau-logistic-app.web.app/';
 
   /// Sends an HTML email containing the verification code (OTP) to the user.
   static Future<void> sendVerificationCode({
@@ -70,7 +70,7 @@ class EmailService {
     }
   }
 
-  /// Sends an HTML welcome email to a newly registered user containing platform links.
+  /// Sends an HTML welcome email to a newly registered user containing platform links and detailed installation steps.
   static Future<void> sendWelcomeEmail({
     required String name,
     required String email,
@@ -109,7 +109,12 @@ class EmailService {
 
           <div style="margin: 20px 0; padding: 15px; background-color: white; border: 1px solid #eee; border-radius: 8px;">
             <b style="color: #333; font-size: 15px;">🤖 למשתמשי Android - התקנת אפליקציה:</b><br/>
-            <a href="$_apkLink" style="color: #00796B; font-weight: bold; text-decoration: none;">לחץ כאן להורדת קובץ ההתקנה (APK) ישירות למכשירך</a>.
+            <div style="margin-top: 10px; line-height: 1.8;">
+              1. <a href="$_apkLink" style="color: #00796B; font-weight: bold; text-decoration: underline;">לחץ כאן להורדת קובץ ההתקנה (APK)</a>.<br/>
+              2. לאחר סיום ההורדה, פתח את הקובץ שהורד.<br/>
+              3. <b>אישור מקורות:</b> אם מופיעה הודעת אבטחה שחוסמת את ההתקנה, לחץ על 'הגדרות' (Settings) ואשר 'התקנה ממקור זה' (Allow from this source).<br/>
+              4. <b>Play Protect:</b> אם קופצת אזהרת אבטחה של גוגל, לחץ על 'פרטים נוספים' (More details) ואז בחר ב-'התקן בכל זאת' (Install anyway).
+            </div>
           </div>
           
           <div style="margin: 20px 0; padding: 15px; background-color: white; border: 1px solid #eee; border-radius: 8px;">

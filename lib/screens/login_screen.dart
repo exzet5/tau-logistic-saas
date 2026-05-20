@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../utils/helpers.dart';
 import '../utils/app_constants.dart';
 import '../services/email_service.dart';
-import 'package:flutter/foundation.dart' show kIsWeb; // To check if it's running on web
-import 'company_registration_screen.dart'; // Your new screen
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'company_registration_screen.dart';
 
 /// Handles user authentication, OTP generation, and Firestore role verification.
 class LoginScreen extends StatefulWidget {
@@ -54,8 +54,6 @@ class _LoginScreenState extends State<LoginScreen> {
       _fetchedName = data['name'];
       _fetchedSurname = data['surname'];
       _fetchedRole = data['role'] ?? 'user';
-      
-      // NEW: Fetch company_id from allowed_users
       _fetchedCompanyId = data['company_id']; 
 
       if (_fetchedName == null || _fetchedCompanyId == null) {
@@ -112,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
             password: "AppPassword123!",
           );
         } else {
-          throw e; // ignore: use_rethrow_when_possible
+          throw e; 
         }
       }
 
@@ -160,9 +158,11 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  // App Logo
                   Image.asset(
                     'assets/reuth_logo.png',
-                    height: 220,
+                    height: 250, 
+                    width: double.infinity, // Ensures the image can stretch horizontally
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 30),
@@ -174,15 +174,36 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 40),
                     
                   if (!_isCodeSent) ...[
-                    TextField(
-                      controller: _emailController,
-                      decoration: const InputDecoration(
-                        labelText: 'אימייל',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.email),
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      onSubmitted: (_) => _verifyEmailAndSendCode(),
+                    // Autocomplete field for email suggestions
+                    Autocomplete<String>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        // Return empty list to rely purely on browser's native autofill
+                        return const Iterable<String>.empty();
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        // Sync internal Autocomplete controller with the state controller
+                        _emailController.text = controller.text;
+                        controller.addListener(() {
+                          _emailController.text = controller.text;
+                        });
+
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          decoration: const InputDecoration(
+                            labelText: 'אימייל',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.email),
+                          ),
+                          keyboardType: TextInputType.emailAddress,
+                          // Trigger browser's native email suggestion dropdown
+                          autofillHints: const [AutofillHints.email],
+                          onSubmitted: (_) {
+                            onFieldSubmitted();
+                            _verifyEmailAndSendCode();
+                          },
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -233,11 +254,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
 
-                  // --- NEW: SaaS Company Registration Link (Web ONLY) ---
+                  // SaaS Company Registration Link (Visible on Web only)
                   if (kIsWeb) ...[
                     const SizedBox(height: 30), 
                     SizedBox(
-                      width: double.infinity, // Makes the tap area as wide as the input fields
+                      width: double.infinity, 
                       child: TextButton(
                         onPressed: () {
                           Navigator.push(
@@ -246,14 +267,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                         },
                         style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16), // Matches the height of other fields
+                          padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         child: const Text(
                           'רישום חברה חדשה (למנהלי מערכת)',
                           style: TextStyle(
                             color: Colors.blue,
-                            fontSize: 16, // Larger, more harmonious font size
+                            fontSize: 16,
                             fontWeight: FontWeight.w500,
                             decoration: TextDecoration.underline,
                             decorationColor: Colors.blue,
