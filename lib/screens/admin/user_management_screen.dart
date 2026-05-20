@@ -6,14 +6,10 @@ import '../../services/email_service.dart';
 import '../../utils/helpers.dart';
 
 /// Screen for administrators to manage system users.
-/// Provides functionality to add new users (with automated welcome emails),
-/// view a complete list of allowed users, edit their details, view activity statistics,
-/// and revoke their access (delete).
 class UserManagementScreen extends StatefulWidget {
-  // NEW: Add companyId parameter
   final String companyId; 
 
-  const UserManagementScreen({super.key, required this.companyId}); // UPDATED
+  const UserManagementScreen({super.key, required this.companyId});
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -22,7 +18,6 @@ class UserManagementScreen extends StatefulWidget {
 class _UserManagementScreenState extends State<UserManagementScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   
-  // Form keys for validation
   final _addFormKey = GlobalKey<FormState>();
   final _editFormKey = GlobalKey<FormState>();
 
@@ -31,12 +26,24 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     'admin': 'דשבורדים וניהול מערכת ידני',
   };
 
+  // --- AVAILABLE TABS CONFIGURATION ---
+  final Map<String, String> _availableTabs = {
+    'dashboard': 'ראשי',
+    'patients': 'מטופלים',
+    'items': 'ציוד',
+    'pikadon': 'פיקדונות',
+    'history': 'היסטוריה',
+    'users': 'משתמשים',
+  };
+
   // --- ADD USER CONTROLLERS ---
   final _addEmailCtrl = TextEditingController();
   final _addNameCtrl = TextEditingController();
   final _addSurnameCtrl = TextEditingController();
   String _addSelectedRole = 'user';
   String? _backendEmailError;
+  
+  List<String> _addSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history'];
 
   // --- LIST & FILTER CONTROLLERS ---
   final _searchFilterCtrl = TextEditingController();
@@ -63,48 +70,28 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     super.dispose();
   }
 
-  // --- HELPERS ---
-
-  /// Displays a temporary status message via Snackbar.
-  void _showSnackBar(String msg, {bool isError = false}) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(msg), 
-          backgroundColor: isError ? Colors.red : Colors.green
-        ),
-      );
-    }
-  }
-
-  /// Displays a non-dismissible loading indicator dialog.
-  void _showLoadingDialog() {
-    showDialog(
-      context: context, 
-      barrierDismissible: false, 
-      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.white))
-    );
-  }
-
-  /// Closes the loading indicator dialog.
-  void _hideLoadingDialog() {
-    if (Navigator.canPop(context)) {
-      Navigator.of(context, rootNavigator: true).pop();
-    }
-  }
-
-  // --- DATABASE OPERATIONS ---
-
-  // NEW: Helper getter for the current company document reference
   DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
 
-  /// Validates inputs, creates a new allowed user record in Firestore, 
-  /// and triggers a welcome email via EmailJS.
+  // --- SAFE ASYNC OPERATIONS (Prevents Infinite Loading) ---
+
   Future<void> _addNewUser() async {
     setState(() => _backendEmailError = null);
     if (!_addFormKey.currentState!.validate()) return;
 
-    _showLoadingDialog();
+    if (_addSelectedRole == 'admin' && _addSelectedTabs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('חובה לבחור לפחות הרשאה אחת'), backgroundColor: Colors.red));
+      return;
+    }
+
+    final nav = Navigator.of(context, rootNavigator: true);
+    final scaffold = ScaffoldMessenger.of(context);
+
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
+    );
+
     try {
       final check = await FirebaseFirestore.instance
           .collection('allowed_users')
@@ -112,7 +99,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           .get();
 
       if (check.docs.isNotEmpty) {
-        _hideLoadingDialog();
+        nav.pop();
         setState(() => _backendEmailError = 'שגיאה: המשתמש כבר קיים במערכת');
         _addFormKey.currentState!.validate();
         return;
@@ -123,12 +110,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         'name': _addNameCtrl.text.trim(),
         'surname': _addSurnameCtrl.text.trim(),
         'role': _addSelectedRole,
-        // NEW: Assign the user to the specific company
         'company_id': widget.companyId,
+        'allowedTabs': _addSelectedTabs, 
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Delegate email sending to the external EmailService
       try {
         await EmailService.sendWelcomeEmail(
           email: _addEmailCtrl.text.trim().toLowerCase(),
@@ -139,25 +125,33 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         debugPrint("Failed to send welcome email: $e");
       }
 
-      _hideLoadingDialog();
-      _showSnackBar('משתמש נוסף ומייל נשלח!');
+      nav.pop();
+      scaffold.showSnackBar(const SnackBar(content: Text('משתמש נוסף ומייל נשלח!'), backgroundColor: Colors.green));
       
       _addEmailCtrl.clear();
       _addNameCtrl.clear();
       _addSurnameCtrl.clear();
-      setState(() => _addSelectedRole = 'user');
+      setState(() {
+        _addSelectedRole = 'user';
+        _addSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history'];
+      });
     } catch (e) {
-      _hideLoadingDialog();
-      _showSnackBar('Error: $e', isError: true);
+      nav.pop();
+      scaffold.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
   }
 
-  /// Updates existing user data in both 'allowed_users' and 'users' collections.
-  /// Also checks if the newly provided email is already taken.
-  Future<void> _updateUser(String docId, String oldEmail, String newEmail, String name, String surname, String role) async {
-    _showLoadingDialog();
+  Future<void> _updateUser(String docId, String oldEmail, String newEmail, String name, String surname, String role, List<String> allowedTabs) async {
+    final nav = Navigator.of(context, rootNavigator: true);
+    final scaffold = ScaffoldMessenger.of(context);
+
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
+    );
+
     try {
-      // Check if new email is already taken by someone else
       if (oldEmail != newEmail) {
         final check = await FirebaseFirestore.instance
             .collection('allowed_users')
@@ -165,23 +159,22 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             .get();
 
         if (check.docs.isNotEmpty) {
-          _hideLoadingDialog();
-          _showSnackBar('שגיאה: האימייל החדש כבר קיים במערכת', isError: true);
+          nav.pop();
+          scaffold.showSnackBar(const SnackBar(content: Text('שגיאה: האימייל החדש כבר קיים במערכת'), backgroundColor: Colors.red));
           return;
         }
       }
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
       
-      // Update the permission list
       batch.update(FirebaseFirestore.instance.collection('allowed_users').doc(docId), {
         'email': newEmail,
         'name': name,
         'surname': surname,
         'role': role,
+        'allowedTabs': allowedTabs, 
       });
 
-      // If the user has already logged in, update their active profile as well
       final userSnap = await FirebaseFirestore.instance.collection('users').where('email', isEqualTo: oldEmail).get();
       if (userSnap.docs.isNotEmpty) {
         batch.update(userSnap.docs.first.reference, {
@@ -190,25 +183,24 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           'surname': surname,
           'displayName': "$name $surname",
           'role': role,
+          'allowedTabs': allowedTabs, 
         });
       }
 
       await batch.commit();
-      _hideLoadingDialog();
-      _showSnackBar('השינויים נשמרו בהצלחה');
+      nav.pop();
+      scaffold.showSnackBar(const SnackBar(content: Text('השינויים נשמרו בהצלחה'), backgroundColor: Colors.green));
     } catch (e) {
-      _hideLoadingDialog();
-      _showSnackBar('Error: $e', isError: true);
+      nav.pop();
+      scaffold.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     }
   }
 
-  /// Fetches equipment usage statistics for a specific user.
   Future<void> _fetchUserStats(String uid) async {
     _statTaken = 0;
     _statReturned = 0;
     _weekDayCounts = [0, 0, 0, 0, 0, 0, 0];
 
-    // NEW: Use _companyRef to fetch History from the specific company
     final snapshot = await _companyRef
         .collection('History')
         .where('staffUid', isEqualTo: uid)
@@ -222,8 +214,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
 
       if (data['timestamp'] != null) {
         DateTime date = (data['timestamp'] as Timestamp).toDate();
-        // Shift Dart's weekday (1=Mon, 7=Sun) to standard array index (0=Sun, 6=Sat) 
-        // depending on your display logic. Here we use 0=Sun.
         int dayIndex = date.weekday == 7 ? 0 : date.weekday;
         if (dayIndex >= 0 && dayIndex < 7) {
           _weekDayCounts[dayIndex]++;
@@ -232,14 +222,71 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     }
   }
 
+  // --- UI COMPONENTS ---
+
+  /// Builds a clean grid of checkboxes for granular tab permissions. 
+  Widget _buildPermissionsGrid(List<String> selectedTabs, Function(String, bool) onTabToggled, {bool isLockedForUsersTab = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(right: 5),
+          child: Text('הרשאות גישה (לשוניות למנהל):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey)),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 10,
+          runSpacing: 5,
+          children: _availableTabs.entries.map((entry) {
+            String tabKey = entry.key;
+            String tabName = entry.value;
+            
+            bool isUsersTab = (tabKey == 'users');
+            bool isChecked = selectedTabs.contains(tabKey);
+            // Block unchecking the users tab ONLY if explicitly locked (during edit of existing admin)
+            bool isDisabled = isUsersTab && isLockedForUsersTab;
+
+            return SizedBox(
+              width: 140, 
+              child: CheckboxListTile(
+                title: Text(
+                  tabName, 
+                  style: TextStyle(
+                    fontSize: 14, 
+                    color: isDisabled ? Colors.grey : Colors.black87,
+                    fontWeight: isChecked ? FontWeight.bold : FontWeight.normal
+                  )
+                ),
+                value: isChecked,
+                activeColor: Colors.teal,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: isDisabled ? null : (bool? val) {
+                  onTabToggled(tabKey, val ?? false);
+                },
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   // --- DIALOGS ---
 
-  /// Opens a dialog to edit user details including email. Requires valid non-empty inputs to save.
   void _showEditDialog(String docId, Map<String, dynamic> userData) {
     final emailCtrl = TextEditingController(text: userData['email']);
     final nameCtrl = TextEditingController(text: userData['name']);
     final surnameCtrl = TextEditingController(text: userData['surname']);
     String selectedRole = userData['role'] ?? 'user';
+    
+    List<String> editSelectedTabs = userData.containsKey('allowedTabs') 
+        ? List<String>.from(userData['allowedTabs'])
+        : ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
+
+    // Lock the 'users' tab only if they already had it (prevents locking themselves out)
+    bool initialHasUsersTab = editSelectedTabs.contains('users');
 
     showDialog(
       context: context,
@@ -249,36 +296,68 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             title: const Text('עריכת פרטי משתמש', style: TextStyle(fontWeight: FontWeight.bold)),
-            content: Form(
-              key: _editFormKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: emailCtrl,
-                      decoration: const InputDecoration(labelText: 'אימייל', border: OutlineInputBorder()),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'חובה להזין אימייל';
-                        if (!AppHelpers.isValidEmail(v.trim())) return 'פורמט אימייל שגוי';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'שם פרטי', border: OutlineInputBorder()),
-                      validator: (v) => v!.trim().isEmpty ? 'חובה להזין שם' : null,
-                    ),
-                    const SizedBox(height: 15),
-                    TextFormField(
-                      controller: surnameCtrl,
-                      decoration: const InputDecoration(labelText: 'שם משפחה', border: OutlineInputBorder()),
-                      validator: (v) => v!.trim().isEmpty ? 'חובה להזין שם משפחה' : null,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildRoleDropdown(selectedRole, (val) => setDialogState(() => selectedRole = val!)),
-                  ],
+            content: SizedBox(
+              width: 500,
+              child: Form(
+                key: _editFormKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: emailCtrl,
+                        decoration: const InputDecoration(labelText: 'אימייל', border: OutlineInputBorder()),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'חובה להזין אימייל';
+                          if (!AppHelpers.isValidEmail(v.trim())) return 'פורמט אימייל שגוי';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 15),
+                      TextFormField(
+                        controller: nameCtrl,
+                        decoration: const InputDecoration(labelText: 'שם פרטי', border: OutlineInputBorder()),
+                        validator: (v) => v!.trim().isEmpty ? 'חובה להזין שם' : null,
+                      ),
+                      const SizedBox(height: 15),
+                      TextFormField(
+                        controller: surnameCtrl,
+                        decoration: const InputDecoration(labelText: 'שם משפחה', border: OutlineInputBorder()),
+                        validator: (v) => v!.trim().isEmpty ? 'חובה להזין שם משפחה' : null,
+                      ),
+                      const SizedBox(height: 15),
+                      _buildRoleDropdown(
+                        selectedRole, 
+                        (val) => setDialogState(() {
+                          selectedRole = val!;
+                          if (val == 'user') {
+                            editSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history'];
+                          } else {
+                            editSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
+                          }
+                        })
+                      ),
+                      
+                      if (selectedRole == 'admin') ...[
+                        const SizedBox(height: 20),
+                        const Divider(),
+                        const SizedBox(height: 10),
+                        _buildPermissionsGrid(
+                          editSelectedTabs, 
+                          (tabKey, isChecked) {
+                            setDialogState(() {
+                              if (isChecked) {
+                                editSelectedTabs.add(tabKey);
+                              } else {
+                                editSelectedTabs.remove(tabKey);
+                              }
+                            });
+                          },
+                          isLockedForUsersTab: initialHasUsersTab
+                        ),
+                      ]
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -291,14 +370,20 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                 onPressed: () async {
                   if (!_editFormKey.currentState!.validate()) return;
-                  Navigator.pop(ctx); // Close dialog first
+                  if (selectedRole == 'admin' && editSelectedTabs.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('חובה להשאיר לפחות הרשאה אחת'), backgroundColor: Colors.red));
+                    return;
+                  }
+                  
+                  Navigator.pop(ctx);
                   await _updateUser(
                     docId, 
                     userData['email'], 
                     emailCtrl.text.trim().toLowerCase(), 
                     nameCtrl.text.trim(), 
                     surnameCtrl.text.trim(), 
-                    selectedRole
+                    selectedRole,
+                    editSelectedTabs 
                   );
                 },
                 child: const Text('שמור שינויים'),
@@ -310,7 +395,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  /// Opens a confirmation dialog before sending the welcome email.
   Future<void> _confirmSendEmail(String email, String name, String role) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -332,19 +416,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
 
     if (confirm == true) {
-      _showLoadingDialog();
+      final nav = Navigator.of(context, rootNavigator: true);
+      final scaffold = ScaffoldMessenger.of(context);
+
+      showDialog(
+        context: context, 
+        barrierDismissible: false, 
+        builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
+      );
+
       try {
         await EmailService.sendWelcomeEmail(name: name, email: email, role: role);
-        _hideLoadingDialog();
-        _showSnackBar('מייל נשלח בהצלחה ל-$email');
+        nav.pop();
+        scaffold.showSnackBar(SnackBar(content: Text('מייל נשלח בהצלחה ל-$email'), backgroundColor: Colors.green));
       } catch (e) {
-        _hideLoadingDialog();
-        _showSnackBar('שגיאה בשליחת המייל: $e', isError: true);
+        nav.pop();
+        scaffold.showSnackBar(SnackBar(content: Text('שגיאה בשליחת המייל: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
-  /// Opens a confirmation dialog before deleting a user and revoking their access.
   Future<void> _confirmDelete(String docId, String email) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -366,7 +457,15 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
 
     if (confirm == true) {
-      _showLoadingDialog();
+      final nav = Navigator.of(context, rootNavigator: true);
+      final scaffold = ScaffoldMessenger.of(context);
+
+      showDialog(
+        context: context, 
+        barrierDismissible: false, 
+        builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
+      );
+
       try {
         WriteBatch batch = FirebaseFirestore.instance.batch();
         batch.delete(FirebaseFirestore.instance.collection('allowed_users').doc(docId));
@@ -377,24 +476,30 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         }
         
         await batch.commit();
-        _hideLoadingDialog();
-        _showSnackBar('המשתמש נמחק בהצלחה');
+        nav.pop();
+        scaffold.showSnackBar(const SnackBar(content: Text('המשתמש נמחק בהצלחה'), backgroundColor: Colors.green));
       } catch (e) {
-        _hideLoadingDialog();
-        _showSnackBar('Error: $e', isError: true);
+        nav.pop();
+        scaffold.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
   }
 
-  /// Fetches user stats and opens a dialog to display the activity chart.
   void _showStatsDialog(String email, String name) async {
-    _showLoadingDialog();
+    final nav = Navigator.of(context, rootNavigator: true);
+    final scaffold = ScaffoldMessenger.of(context);
+
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
+    );
     
     try {
       final userSnap = await FirebaseFirestore.instance.collection('users').where('email', isEqualTo: email).get();
       if (userSnap.docs.isEmpty) {
-        _hideLoadingDialog();
-        _showSnackBar('המשתמש טרם התחבר למערכת, אין סטטיסטיקה', isError: true);
+        nav.pop();
+        scaffold.showSnackBar(const SnackBar(content: Text('המשתמש טרם התחבר למערכת, אין סטטיסטיקה'), backgroundColor: Colors.red));
         return;
       }
       
@@ -405,7 +510,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           : "לא ידוע";
 
       await _fetchUserStats(uid);
-      _hideLoadingDialog();
+      nav.pop();
 
       if (!mounted) return;
 
@@ -434,8 +539,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         ),
       );
     } catch (e) {
-      _hideLoadingDialog();
-      _showSnackBar('שגיאה בטעינת סטטיסטיקה', isError: true);
+      nav.pop();
+      scaffold.showSnackBar(const SnackBar(content: Text('שגיאה בטעינת סטטיסטיקה'), backgroundColor: Colors.red));
     }
   }
 
@@ -471,7 +576,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  /// Builds the tab for adding a new user.
   Widget _buildAddUserTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(30),
@@ -512,7 +616,37 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
               ],
             ),
             const SizedBox(height: 20),
-            _buildRoleDropdown(_addSelectedRole, (val) => setState(() => _addSelectedRole = val!)),
+            _buildRoleDropdown(
+              _addSelectedRole, 
+              (val) => setState(() {
+                _addSelectedRole = val!;
+                if (val == 'user') {
+                  _addSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history'];
+                } else {
+                  _addSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
+                }
+              })
+            ),
+            
+            if (_addSelectedRole == 'admin') ...[
+              const SizedBox(height: 20),
+              const Divider(),
+              const SizedBox(height: 10),
+              _buildPermissionsGrid(
+                _addSelectedTabs, 
+                (tabKey, isChecked) {
+                  setState(() {
+                    if (isChecked) {
+                      _addSelectedTabs.add(tabKey);
+                    } else {
+                      _addSelectedTabs.remove(tabKey);
+                    }
+                  });
+                },
+                isLockedForUsersTab: false // Unlocked for new users
+              ),
+            ],
+
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity, 
@@ -529,7 +663,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  /// Builds the CRM-style list of all allowed users with real-time filtering and action buttons.
   Widget _buildUserListTab() {
     return Column(
       children: [
@@ -543,7 +676,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
               border: OutlineInputBorder()
             ),
             onTap: () {
-              // Clear search query on tap to quickly reset the list
               _searchFilterCtrl.clear();
               setState(() => _searchQuery = "");
             },
@@ -553,7 +685,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         const Divider(height: 1),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            // NEW: Filter by company_id. OrderBy is done in memory to avoid Firebase index requirements
             stream: FirebaseFirestore.instance
                 .collection('allowed_users')
                 .where('company_id', isEqualTo: widget.companyId)
@@ -561,7 +692,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
               
-              // NEW: Sort the documents manually in Dart by name
               var allDocs = snapshot.data!.docs.toList();
               allDocs.sort((a, b) => (a.data() as Map<String, dynamic>)['name'].toString().compareTo((b.data() as Map<String, dynamic>)['name'].toString()));
 
@@ -581,6 +711,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                   final d = doc.data() as Map<String, dynamic>;
                   final fullName = "${d['name']} ${d['surname']}";
                   final role = d['role'] ?? 'user';
+                  
+                  List<dynamic> allowedTabs = d['allowedTabs'] ?? ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
 
                   return Card(
                     elevation: 2,
@@ -592,7 +724,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                         child: Icon(role == 'admin' ? Icons.admin_panel_settings : Icons.person, color: role == 'admin' ? Colors.red : Colors.teal),
                       ),
                       title: Text(fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      subtitle: Text(d['email'], style: TextStyle(color: Colors.grey[700])),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(d['email'], style: TextStyle(color: Colors.grey[700])),
+                          const SizedBox(height: 4),
+                          Text("גישה ל-${allowedTabs.length} לשוניות", style: const TextStyle(fontSize: 12, color: Colors.teal)),
+                        ],
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -630,7 +769,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  /// Builds the visual area displaying user equipment interactions and weekly activity chart.
   Widget _buildStatsArea() {
     int maxVal = _weekDayCounts.reduce(max);
     if (maxVal == 0) maxVal = 1;
@@ -676,7 +814,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  /// Builds a minimal card for numerical statistics.
   Widget _buildStatCard(String title, String value, Color bgColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.all(15),
@@ -690,7 +827,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     );
   }
 
-  /// Helper widget to render role selection dropdowns.
   Widget _buildRoleDropdown(String currentVal, Function(String?) onChanged) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

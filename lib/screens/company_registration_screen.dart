@@ -80,6 +80,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         'surname': lastName,
         'role': 'admin',
         'company_id': companyId,
+        'allowedTabs': ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'],
         'createdAt': FieldValue.serverTimestamp(),
       });
 

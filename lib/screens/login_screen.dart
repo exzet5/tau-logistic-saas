@@ -29,6 +29,8 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _generatedCode;
   
   String? _fetchedCompanyId; 
+  // NEW: Store allowed tabs fetched from the invitation list
+  List<String>? _fetchedAllowedTabs; 
 
   /// Verifies if the email exists in the 'allowed_users' collection and sends an OTP.
   Future<void> _verifyEmailAndSendCode() async {
@@ -55,6 +57,11 @@ class _LoginScreenState extends State<LoginScreen> {
       _fetchedSurname = data['surname'];
       _fetchedRole = data['role'] ?? 'user';
       _fetchedCompanyId = data['company_id']; 
+
+      // NEW: Extract allowedTabs with a fallback to all tabs for legacy users
+      _fetchedAllowedTabs = data.containsKey('allowedTabs') 
+          ? List<String>.from(data['allowedTabs']) 
+          : ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
 
       if (_fetchedName == null || _fetchedCompanyId == null) {
         _showSnack('שגיאה: חסר שם או שיוך לחברה בהגדרות המערכת');
@@ -127,6 +134,8 @@ class _LoginScreenState extends State<LoginScreen> {
           'displayName': fullName,
           'role': _fetchedRole,
           'company_id': _fetchedCompanyId, 
+          // NEW: Copy granular permissions to the active user profile
+          'allowedTabs': _fetchedAllowedTabs,
           'active': true,
           'lastLogin': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
