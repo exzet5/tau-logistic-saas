@@ -77,11 +77,21 @@ class PdfService {
     required String patientId, 
     required List<Map<String, String>> formattedItems, 
     required double totalCost, 
-    required String staffName
+    required String staffName,
+    String? customTitle,
+    String? customTerms, // Changed to a single String
   }) async {
     final pdf = pw.Document();
     final font = await PdfGoogleFonts.rubikRegular();
     final fontBold = await PdfGoogleFonts.rubikMedium();
+
+    // Fallback to default values if custom values are not provided
+    final finalTitle = customTitle ?? 'טופס השאלת ציוד והתחייבות לפיקדון';
+    final finalTerms = customTerms ?? 
+      '1. הציוד נמסר בהשאלה לתקופת השימוש בלבד.\n'
+      '2. הנני מתחייב/ת לשמור על הציוד במצב תקין ולהחזירו ל-$companyName עם סיום השימוש.\n'
+      '3. ידוע לי כי דמי הפיקדון יוחזרו במלואם רק עם החזרת הציוד בשלמותו.\n'
+      '4. במקרה של אובדן או נזק משמעותי, החברה רשאית לחלט את הפיקדון.';
 
     pdf.addPage(
       pw.Page(
@@ -99,7 +109,7 @@ class PdfService {
               ),
               pw.SizedBox(height: 10),
               pw.Center(
-                child: pw.Text('טופס השאלת ציוד והתחייבות לפיקדון', style: pw.TextStyle(font: fontBold, fontSize: 24)),
+                child: pw.Text(finalTitle, style: pw.TextStyle(font: fontBold, fontSize: 24)),
               ),
               pw.SizedBox(height: 30),
               pw.Row(
@@ -139,13 +149,10 @@ class PdfService {
               pw.SizedBox(height: 20),
               pw.Text('תנאי ההשאלה והפיקדון:', style: pw.TextStyle(font: fontBold, fontSize: 16)),
               pw.SizedBox(height: 10),
-              pw.Text('1. הציוד נמסר בהשאלה לתקופת השימוש בלבד.'),
-              pw.SizedBox(height: 5),
-              pw.Text('2. הנני מתחייב/ת לשמור על הציוד במצב תקין ולהחזירו ל-$companyName עם סיום השימוש.'),
-              pw.SizedBox(height: 5),
-              pw.Text('3. ידוע לי כי דמי הפיקדון יוחזרו במלואם רק עם החזרת הציוד בשלמותו.'),
-              pw.SizedBox(height: 5),
-              pw.Text('4. במקרה של אובדן או נזק משמעותי, החברה רשאית לחלט את הפיקדון.'),
+              
+              // Render the entire multiline terms string directly
+              pw.Text(finalTerms),
+              
               pw.Spacer(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,

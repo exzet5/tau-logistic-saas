@@ -38,7 +38,15 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
   bool _isProcessing = false;
   bool _isLoadingData = true;
+
   String? _companyName;
+  String _pdfTitle = 'טופס השאלת ציוד והתחייבות לפיקדון';
+  String _pdfTerms = 
+    '1. הציוד נמסר בהשאלה לתקופת השימוש בלבד.\n'
+    '2. הנני מתחייב/ת לשמור על הציוד במצב תקין ולהחזירו עם סיום השימוש.\n'
+    '3. ידוע לי כי דמי הפיקדון יוחזרו במלואם רק עם החזרת הציוד בשלמותו.\n'
+    '4. במקרה של אובדן או נזק משמעותי, החברה רשאית לחלט את הפיקדון.';
+
   Map<String, String> _usersCache = {};
   Map<String, String> _groupNamesCache = {}; 
 
@@ -62,10 +70,25 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
   Future<void> _loadAuxiliaryData() async {
     try {
-      // Fetch company name
       var companyDoc = await _companyRef.get();
       if (companyDoc.exists) {
-        _companyName = companyDoc.get('name') ?? 'שם החברה';
+        _companyName = companyDoc.get('name') ?? 'Company';
+      }
+
+      var pdfSettingsDoc = await _companyRef.collection('system').doc('pdf_settings').get();
+      if (pdfSettingsDoc.exists) {
+        var data = pdfSettingsDoc.data() as Map<String, dynamic>;
+        setState(() {
+          _pdfTitle = data['title'] ?? _pdfTitle;
+          
+          // Convert safely in case it was saved as a List previously
+          var termsData = data['terms'];
+          if (termsData is List) {
+            _pdfTerms = termsData.join('\n');
+          } else if (termsData is String) {
+            _pdfTerms = termsData;
+          }
+        });
       }
 
       var usersSnap = await FirebaseFirestore.instance
@@ -89,12 +112,92 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         });
       }
     } catch (e) {
-      debugPrint("Error loading aux data: $e");
+      debugPrint("Error loading auxiliary data: $e");
       if (mounted) {
         setState(() {
           _isLoadingData = false;
         });
       }
+    }
+  }
+
+  // Dialog to edit PDF settings via Firestore
+  Future<void> _showPdfSettingsDialog() async {
+    final titleCtrl = TextEditingController(text: _pdfTitle);
+    final termsCtrl = TextEditingController(text: _pdfTerms); // Single controller
+
+    bool? save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edit PDF Form Settings"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: "Form Title")),
+              const SizedBox(height: 20),
+              TextField(
+                controller: termsCtrl, 
+                decoration: const InputDecoration(
+                  labelText: "Terms and Conditions",
+                  border: OutlineInputBorder()
+                ),
+                maxLines: null, // Allows multiline input
+                minLines: 5,    // Gives it a good default height
+                keyboardType: TextInputType.multiline,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Save")),
+        ],
+      ),
+    );
+
+    if (save == true) {
+      _showLoading();
+      await _companyRef.collection('system').doc('pdf_settings').set({
+        'title': titleCtrl.text,
+        'terms': termsCtrl.text // Save as a single string
+      }, SetOptions(merge: true));
+      
+      setState(() {
+        _pdfTitle = titleCtrl.text;
+        _pdfTerms = termsCtrl.text;
+      });
+      _hideLoading();
+    }
+  }
+
+  // Updated PDF generation call
+  Future<void> _generateAndDownloadPdf(String patientId, List items, double totalCost, String staffName) async {
+    _showLoading();
+    try {
+      List<Map<String, String>> formattedItems = items.map((item) {
+        return {
+          'name': item['itemName']?.toString() ?? 'Unknown',
+          'group': _getReadableGroupName(item['group'] ?? ''),
+          'id': item['itemId']?.toString() ?? '',
+          'cost': item['cost']?.toString() ?? '0',
+        };
+      }).toList();
+
+      await PdfService.generateDepositFormPdf(
+        companyName: _companyName ?? 'Company Name',
+        patientId: patientId, 
+        formattedItems: formattedItems, 
+        totalCost: totalCost, 
+        staffName: staffName,
+        customTitle: _pdfTitle,
+        customTerms: _pdfTerms,
+      );
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('PDF Error: $e'), backgroundColor: Colors.red));
+    } finally {
+      _hideLoading();
     }
   }
 
@@ -688,7 +791,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         'פעולה (Action)',
         'פריטים (Items)',
         'לקוח (Customer ID)',
-        'תאריך ושעה (Date)'       
+        'תאריך ושעה (Date)'        
       ];
 
       List<List<dynamic>> rows = [];
@@ -739,33 +842,6 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
     }
   }
 
-  Future<void> _generateAndDownloadPdf(String patientId, List items, double totalCost, String staffName) async {
-    _showLoading();
-    try {
-      List<Map<String, String>> formattedItems = items.map((item) {
-        return {
-          'name': item['itemName']?.toString() ?? 'לא ידוע',
-          'group': _getReadableGroupName(item['group'] ?? ''),
-          'id': item['itemId']?.toString() ?? '',
-          'cost': item['cost']?.toString() ?? '0',
-        };
-      }).toList();
-
-      await PdfService.generateDepositFormPdf(
-        companyName: _companyName ?? 'שם החברה', // Pass the loaded company name
-        patientId: patientId, 
-        formattedItems: formattedItems, 
-        totalCost: totalCost, 
-        staffName: staffName
-      );
-
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת PDF: $e'), backgroundColor: Colors.red));
-    } finally {
-      _hideLoading();
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Directionality(
@@ -810,10 +886,9 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
           .orderBy('createdAt', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        // --- CUSTOM ERROR / EMPTY STATE ---
         if (snapshot.hasError) {
           debugPrint("Firestore Index Error: ${snapshot.error}");
-          return _buildEmptyState(Icons.settings_suggest, "נדרשת הגדרה (Index) במסד הנתונים\nראה קונסולה למפתח", color: Colors.orange);
+          return _buildEmptyState(Icons.settings_suggest, "נדרשת הגדרה (Index) במסד הנתונים", color: Colors.orange);
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -897,29 +972,18 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                   }).toList(),
                                   const SizedBox(height: 15),
                                   SelectableText("סך הכל פיקדון נדרש: ₪$totalCost", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red)),
-                                  const SizedBox(height: 20),
-                                  
-                                  ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue[700],
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-                                    ),
-                                    onPressed: () => _generateAndDownloadPdf(patientId, items, totalCost, staffName),
-                                    icon: const Icon(Icons.picture_as_pdf),
-                                    label: const Text("הורד טופס לחתימה", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-                                  ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 30),
                             
+                            // Buttons container (Updated with PDF and Settings)
                             Container(
                               width: 160, 
                               padding: const EdgeInsets.only(top: 10),
                               child: Column(
                                 children: [
+                                  // Button: Take Deposit
                                   SizedBox(
                                     width: double.infinity,
                                     height: 45, 
@@ -934,6 +998,8 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                     ),
                                   ),
                                   const SizedBox(height: 15),
+                                  
+                                  // Button: No Deposit
                                   SizedBox(
                                     width: double.infinity,
                                     height: 45, 
@@ -948,16 +1014,44 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                       label: const Text("ללא פיקדון"),
                                     ),
                                   ),
+                                  const SizedBox(height: 15),
+                                  
+                                  // Button Group: Download PDF and Settings
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: SizedBox(
+                                          height: 45,
+                                          child: ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.blue[700],
+                                              foregroundColor: Colors.white,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                                            ),
+                                            onPressed: () => _generateAndDownloadPdf(patientId, items, totalCost, staffName),
+                                            icon: const Icon(Icons.picture_as_pdf, size: 16),
+                                            label: const Text("הורד טופס לחתימה", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blueGrey),
+                                        onPressed: _showPdfSettingsDialog, // Opens the settings dialog
+                                        tooltip: "Edit Settings",
+                                      ),
+                                    ],
+                                  ),
                                 ],
                               ),
-                            )
+                            ),
                           ],
                         ),
                       ),
                     );
                   },
-              ),
-            )
+                ),
+            ),
           ],
         );
       },
