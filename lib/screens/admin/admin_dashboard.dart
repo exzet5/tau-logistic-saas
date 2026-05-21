@@ -50,7 +50,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _allAvailableTabs = [
       TabDefinition(key: 'dashboard', label: 'ראשי', icon: const Icon(Icons.dashboard), page: DashboardScreen(companyId: widget.companyId)),
       TabDefinition(key: 'users', label: 'משתמשים', icon: const Icon(Icons.people), page: UserManagementScreen(companyId: widget.companyId)),
-      TabDefinition(key: 'patients', label: 'לקוחות', icon: const Icon(Icons.sick), page: PatientsManagementScreen(companyId: widget.companyId)),
+      TabDefinition(key: 'patients', label: 'לקוחות', icon: const Icon(Icons.face), page: PatientsManagementScreen(companyId: widget.companyId)),
       TabDefinition(key: 'items', label: 'ציוד', icon: const Icon(Icons.inventory), page: ItemsManagementScreen(companyId: widget.companyId)),
       TabDefinition(key: 'pikadon', label: 'פיקדונות', icon: _buildPikadonIcon(), page: PikadonScreen(companyId: widget.companyId)),
       TabDefinition(key: 'history', label: 'היסטוריה', icon: const Icon(Icons.history), page: HistoryScreen(companyId: widget.companyId)),
