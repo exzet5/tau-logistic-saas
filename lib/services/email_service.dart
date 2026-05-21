@@ -10,7 +10,7 @@ class EmailService {
   static const String _scriptUrl = 'https://script.google.com/macros/s/AKfycbzls4Kmo73P0KkD2GYwWDqu_Y-UciOPFDt5TZwEbSBVs_n4URc9K-XtsfSZqiOOoH1B/exec';
   
   // App links for welcome emails
-  static const String _apkLink = 'https://drive.google.com/file/d/1qDLI0zx13iCYcIKTB_rDXXc6cDIG5b-t/view?usp=sharing';
+  static const String _apkLink = 'https://drive.google.com/file/d/1XCR9isYBETkrs96psayggfeUrZ5-pTaC/view?usp=sharing';
   static const String _webLink = 'https://tau-logistic-app.web.app/';
 
   /// Sends an HTML email containing the verification code (OTP) to the user.

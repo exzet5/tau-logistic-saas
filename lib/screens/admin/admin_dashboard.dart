@@ -9,7 +9,6 @@ import '../../utils/helpers.dart';
 import 'pikadon_screen.dart'; 
 import 'history_screen.dart';
 
-/// Helper class to bind a tab's key to its UI representations
 class TabDefinition {
   final String key;
   final String label;
@@ -24,8 +23,6 @@ class TabDefinition {
   });
 }
 
-/// Main dashboard for administrators, containing a dynamic side navigation rail 
-/// based on the user's granular permissions fetched via a real-time Stream.
 class AdminDashboard extends StatefulWidget {
   final String displayName; 
   final String companyId; 
@@ -42,14 +39,14 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   int _selectedIndex = 0;
-  
-  // Define all available tabs once to preserve widget state
   late final List<TabDefinition> _allAvailableTabs;
+  late final Stream<DocumentSnapshot> _userPermissionsStream;
 
   @override
   void initState() {
     super.initState();
-    // Initialize pages once so they don't rebuild from scratch on every stream update
+    
+    // Initialize all tabs once
     _allAvailableTabs = [
       TabDefinition(key: 'dashboard', label: 'ראשי', icon: const Icon(Icons.dashboard), page: DashboardScreen(companyId: widget.companyId)),
       TabDefinition(key: 'users', label: 'משתמשים', icon: const Icon(Icons.people), page: UserManagementScreen(companyId: widget.companyId)),
@@ -58,9 +55,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
       TabDefinition(key: 'pikadon', label: 'פיקדונות', icon: _buildPikadonIcon(), page: PikadonScreen(companyId: widget.companyId)),
       TabDefinition(key: 'history', label: 'היסטוריה', icon: const Icon(Icons.history), page: HistoryScreen(companyId: widget.companyId)),
     ];
+
+    // Cache the permissions stream
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      _userPermissionsStream = FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots();
+    } else {
+      _userPermissionsStream = const Stream.empty();
+    }
   }
 
-  /// Custom stream builder to show pending deposit badges on the Pikadon icon
+  /// Builds a widget with a badge for pending deposits
   Widget _buildPikadonIcon() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -85,77 +90,49 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  /// Generates a time-appropriate greeting in Hebrew.
   String _getGreeting() {
     var hour = DateTime.now().hour;
-    if (hour >= 5 && hour < 12) {
-      return 'בוקר טוב'; 
-    } else if (hour >= 12 && hour < 17) {
-      return 'צהריים טובים'; 
-    } else if (hour >= 17 && hour < 21) {
-      return 'ערב טוב'; 
-    } else {
-      return 'לילה טוב'; 
-    }
+    if (hour >= 5 && hour < 12) return 'בוקר טוב'; 
+    else if (hour >= 12 && hour < 17) return 'צהריים טובים'; 
+    else if (hour >= 17 && hour < 21) return 'ערב טוב'; 
+    else return 'לילה טוב'; 
   }
 
   @override
   Widget build(BuildContext context) {
-    User? currentUser = FirebaseAuth.instance.currentUser;
-
-    if (currentUser == null) {
-      return const Scaffold(body: Center(child: Text("Not logged in")));
-    }
-
-    // Wrap the entire Scaffold body in a StreamBuilder to listen to permission changes in real-time
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots(),
+      stream: _userPermissionsStream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        // Show a loader only on the very first load
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.teal)));
         }
 
         List<String> allowedKeys = [];
-        
         if (snapshot.hasData && snapshot.data!.exists) {
           var userData = snapshot.data!.data() as Map<String, dynamic>;
-          if (userData.containsKey('allowedTabs')) {
-            allowedKeys = List<String>.from(userData['allowedTabs']);
-          } else {
-            // Legacy fallback
+          allowedKeys = userData.containsKey('allowedTabs') 
+              ? List<String>.from(userData['allowedTabs'])
+              : ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
+        } else {
+            // Default permissions if document not ready
             allowedKeys = ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
-          }
         }
 
-        // Filter available tabs based on the real-time permissions
         List<TabDefinition> activeTabs = _allAvailableTabs.where((tab) => allowedKeys.contains(tab.key)).toList();
 
-        // Edge case: user has no permissions at all
+        // Handle case where user lost all permissions or tab was removed
         if (activeTabs.isEmpty) {
           return Scaffold(
             appBar: AppBar(backgroundColor: Colors.blueGrey[900]),
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.block, size: 80, color: Colors.grey),
-                  const SizedBox(height: 20),
-                  const Text("אין לך הרשאות לצפות במסכים במערכת זו", style: TextStyle(fontSize: 20, color: Colors.grey)),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: () => FirebaseAuth.instance.signOut(), 
-                    icon: const Icon(Icons.logout), 
-                    label: const Text("התנתק")
-                  )
-                ],
-              ),
-            ),
+            body: const Center(child: Text("אין לך הרשאות גישה", style: TextStyle(fontSize: 20))),
           );
         }
 
-        // Prevent range errors if a tab is removed while the user is actively on it
-        int safeIndex = _selectedIndex;
-        if (safeIndex >= activeTabs.length) {
-          safeIndex = 0; 
+        // Adjust index if necessary
+        if (_selectedIndex >= activeTabs.length) {
+          _selectedIndex = 0;
         }
 
         return Scaffold(
@@ -163,45 +140,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "${_getGreeting()}, ${widget.displayName}",
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Text(
-                  "מערכת ניהול (Admin)",
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
+                Text("${_getGreeting()}, ${widget.displayName}", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text("מערכת ניהול (Admin)", style: TextStyle(color: Colors.white70, fontSize: 12)),
               ],
             ),
             backgroundColor: Colors.blueGrey[900],
             actions: [
-              IconButton(
-                icon: const Icon(Icons.logout),
-                onPressed: () async {
-                  await FirebaseAuth.instance.signOut();
-                },
-              )
+              IconButton(icon: const Icon(Icons.logout), onPressed: () async => await FirebaseAuth.instance.signOut())
             ],
           ),
           body: Row(
             children: [
               NavigationRail(
-                selectedIndex: safeIndex,
-                onDestinationSelected: (int index) {
-                  // Only update state if we are actually mounted and clicking
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                },
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
                 labelType: NavigationRailLabelType.all,
-                destinations: activeTabs.map((tab) => 
-                  NavigationRailDestination(icon: tab.icon, label: Text(tab.label))
-                ).toList(),
+                destinations: activeTabs.map((tab) => NavigationRailDestination(icon: tab.icon, label: Text(tab.label))).toList(),
               ),
               const VerticalDivider(thickness: 1, width: 1),
-              Expanded(
-                child: activeTabs[safeIndex].page,
-              ),
+              Expanded(child: activeTabs[_selectedIndex].page),
             ],
           ),
         );

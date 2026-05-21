@@ -6,6 +6,8 @@ import '../../services/email_service.dart';
 import '../../utils/helpers.dart';
 
 /// Screen for administrators to manage system users.
+/// Provides functionality to add new users, set granular tab permissions,
+/// view user lists, edit details, view activity statistics, and revoke access.
 class UserManagementScreen extends StatefulWidget {
   final String companyId; 
 
@@ -43,6 +45,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   String _addSelectedRole = 'user';
   String? _backendEmailError;
   
+  // Default tabs for a new user
   List<String> _addSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history'];
 
   // --- LIST & FILTER CONTROLLERS ---
@@ -70,28 +73,50 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     super.dispose();
   }
 
+  // --- HELPERS ---
+
+  void _showSnackBar(String msg, {bool isError = false}) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg), 
+          backgroundColor: isError ? Colors.red : Colors.green
+        ),
+      );
+    }
+  }
+
+  void _showLoadingDialog() {
+    showDialog(
+      context: context, 
+      barrierDismissible: false, 
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.white))
+    );
+  }
+
+  void _hideLoadingDialog() {
+    if (Navigator.canPop(context)) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
 
-  // --- SAFE ASYNC OPERATIONS (Prevents Infinite Loading) ---
+  // --- DATABASE OPERATIONS ---
 
   Future<void> _addNewUser() async {
     setState(() => _backendEmailError = null);
     if (!_addFormKey.currentState!.validate()) return;
 
     if (_addSelectedRole == 'admin' && _addSelectedTabs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('חובה לבחור לפחות הרשאה אחת'), backgroundColor: Colors.red));
+      _showSnackBar('חובה לבחור לפחות הרשאה אחת (לשונית)', isError: true);
       return;
     }
 
     final nav = Navigator.of(context, rootNavigator: true);
     final scaffold = ScaffoldMessenger.of(context);
 
-    showDialog(
-      context: context, 
-      barrierDismissible: false, 
-      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
-    );
-
+    _showLoadingDialog();
     try {
       final check = await FirebaseFirestore.instance
           .collection('allowed_users')
@@ -134,6 +159,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       setState(() {
         _addSelectedRole = 'user';
         _addSelectedTabs = ['dashboard', 'patients', 'items', 'pikadon', 'history'];
+        _tabController.index = 1; // Возвращаемся в список
       });
     } catch (e) {
       nav.pop();
@@ -145,12 +171,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
     final nav = Navigator.of(context, rootNavigator: true);
     final scaffold = ScaffoldMessenger.of(context);
 
-    showDialog(
-      context: context, 
-      barrierDismissible: false, 
-      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
-    );
-
+    _showLoadingDialog();
     try {
       if (oldEmail != newEmail) {
         final check = await FirebaseFirestore.instance
@@ -190,6 +211,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       await batch.commit();
       nav.pop();
       scaffold.showSnackBar(const SnackBar(content: Text('השינויים נשמרו בהצלחה'), backgroundColor: Colors.green));
+      setState(() => _tabController.index = 1); // Оставляем на вкладке списка
     } catch (e) {
       nav.pop();
       scaffold.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
@@ -225,51 +247,57 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   // --- UI COMPONENTS ---
 
   /// Builds a clean grid of checkboxes for granular tab permissions. 
+  /// Only rendered if the role is Admin.
   Widget _buildPermissionsGrid(List<String> selectedTabs, Function(String, bool) onTabToggled, {bool isLockedForUsersTab = false}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(right: 5),
-          child: Text('הרשאות גישה (לשוניות למנהל):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey)),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 10,
-          runSpacing: 5,
-          children: _availableTabs.entries.map((entry) {
-            String tabKey = entry.key;
-            String tabName = entry.value;
-            
-            bool isUsersTab = (tabKey == 'users');
-            bool isChecked = selectedTabs.contains(tabKey);
-            // Block unchecking the users tab ONLY if explicitly locked (during edit of existing admin)
-            bool isDisabled = isUsersTab && isLockedForUsersTab;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+      decoration: BoxDecoration(
+        color: Colors.teal.shade50.withOpacity(0.5), 
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.teal.shade100)
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('הרשאות גישה אישיות (לשוניות למנהל):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF004D40))),
+          const SizedBox(height: 15),
+          Wrap(
+            spacing: 15,
+            runSpacing: 10,
+            children: _availableTabs.entries.map((entry) {
+              String tabKey = entry.key;
+              String tabName = entry.value;
+              
+              bool isUsersTab = (tabKey == 'users');
+              bool isChecked = selectedTabs.contains(tabKey);
+              bool isDisabled = isUsersTab && isLockedForUsersTab;
 
-            return SizedBox(
-              width: 140, 
-              child: CheckboxListTile(
-                title: Text(
-                  tabName, 
-                  style: TextStyle(
-                    fontSize: 14, 
-                    color: isDisabled ? Colors.grey : Colors.black87,
-                    fontWeight: isChecked ? FontWeight.bold : FontWeight.normal
-                  )
+              return SizedBox(
+                width: 140, 
+                child: CheckboxListTile(
+                  title: Text(
+                    tabName, 
+                    style: TextStyle(
+                      fontSize: 14, 
+                      color: isDisabled ? Colors.grey : Colors.black87,
+                      fontWeight: isChecked ? FontWeight.bold : FontWeight.normal
+                    )
+                  ),
+                  value: isChecked,
+                  activeColor: Colors.teal,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: isDisabled ? null : (bool? val) {
+                    onTabToggled(tabKey, val ?? false);
+                  },
                 ),
-                value: isChecked,
-                activeColor: Colors.teal,
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                onChanged: isDisabled ? null : (bool? val) {
-                  onTabToggled(tabKey, val ?? false);
-                },
-              ),
-            );
-          }).toList(),
-        ),
-      ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -285,7 +313,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         ? List<String>.from(userData['allowedTabs'])
         : ['dashboard', 'patients', 'items', 'pikadon', 'history', 'users'];
 
-    // Lock the 'users' tab only if they already had it (prevents locking themselves out)
     bool initialHasUsersTab = editSelectedTabs.contains('users');
 
     showDialog(
@@ -419,12 +446,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       final nav = Navigator.of(context, rootNavigator: true);
       final scaffold = ScaffoldMessenger.of(context);
 
-      showDialog(
-        context: context, 
-        barrierDismissible: false, 
-        builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
-      );
-
+      _showLoadingDialog();
       try {
         await EmailService.sendWelcomeEmail(name: name, email: email, role: role);
         nav.pop();
@@ -460,12 +482,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
       final nav = Navigator.of(context, rootNavigator: true);
       final scaffold = ScaffoldMessenger.of(context);
 
-      showDialog(
-        context: context, 
-        barrierDismissible: false, 
-        builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
-      );
-
+      _showLoadingDialog();
       try {
         WriteBatch batch = FirebaseFirestore.instance.batch();
         batch.delete(FirebaseFirestore.instance.collection('allowed_users').doc(docId));
@@ -486,20 +503,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   }
 
   void _showStatsDialog(String email, String name) async {
-    final nav = Navigator.of(context, rootNavigator: true);
-    final scaffold = ScaffoldMessenger.of(context);
-
-    showDialog(
-      context: context, 
-      barrierDismissible: false, 
-      builder: (ctx) => const Center(child: CircularProgressIndicator(color: Colors.teal))
-    );
+    _showLoadingDialog();
     
     try {
       final userSnap = await FirebaseFirestore.instance.collection('users').where('email', isEqualTo: email).get();
       if (userSnap.docs.isEmpty) {
-        nav.pop();
-        scaffold.showSnackBar(const SnackBar(content: Text('המשתמש טרם התחבר למערכת, אין סטטיסטיקה'), backgroundColor: Colors.red));
+        _hideLoadingDialog();
+        _showSnackBar('המשתמש טרם התחבר למערכת, אין סטטיסטיקה', isError: true);
         return;
       }
       
@@ -510,7 +520,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
           : "לא ידוע";
 
       await _fetchUserStats(uid);
-      nav.pop();
+      _hideLoadingDialog();
 
       if (!mounted) return;
 
@@ -539,8 +549,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
         ),
       );
     } catch (e) {
-      nav.pop();
-      scaffold.showSnackBar(const SnackBar(content: Text('שגיאה בטעינת סטטיסטיקה'), backgroundColor: Colors.red));
+      _hideLoadingDialog();
+      _showSnackBar('שגיאה בטעינת סטטיסטיקה', isError: true);
     }
   }
 
@@ -643,7 +653,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
                     }
                   });
                 },
-                isLockedForUsersTab: false // Unlocked for new users
+                isLockedForUsersTab: false // Новый пользователь — чекбокс разблокирован
               ),
             ],
 
