@@ -160,7 +160,8 @@ class _LoginScreenState extends State<LoginScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         body: Center(
-          child: Padding(
+          // Wrap with SingleChildScrollView to allow scrolling when keyboard appears
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),

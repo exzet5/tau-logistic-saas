@@ -82,7 +82,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
     if (rawTZ.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("שגיאה: מספר מטופל לא יכול להיות ריק"), 
+          content: Text("שגיאה: מספר לקוח לא יכול להיות ריק"), 
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
@@ -225,13 +225,13 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
               textDirection: TextDirection.rtl,
               child: AlertDialog(
                 title: const Text('פריט תקול'),
-                content: Text('הפריט (קבוצה: $itemGroup) מסומן במערכת כ-Broken (תקול).\nהאם תרצה לסמן אותו כתקין ולשייך למטופל?'),
+                content: Text('הפריט (קבוצה: $itemGroup) מסומן במערכת כ-Broken (תקול).\nהאם תרצה לסמן אותו כתקין ולשייך ללקוח?'),
                 actions: [
                   TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ביטול')),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                     onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('הפריט תקין (שייך למטופל)'),
+                    child: const Text('הפריט תקין (שייך ללקוח)'),
                   ),
                 ],
               ),
@@ -251,7 +251,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                 textDirection: TextDirection.rtl,
                 child: AlertDialog(
                   title: const Text('הפריט תפוס!'),
-                  content: SelectableText('פריט זה כבר נמצא אצל מטופל אחר.\n\nמספר מטופל המחזיק:\n$holderDecoded'),
+                  content: SelectableText('פריט זה כבר נמצא אצל לקוח אחר.\n\nמספר לקוח המחזיק:\n$holderDecoded'),
                   actions: [
                     TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('אישור')),
                   ],
@@ -299,7 +299,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
       }
 
       _addItemController.clear();
-      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("הפריט נוסף למטופל בהצלחה"), backgroundColor: Colors.green));
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("הפריט נוסף לקוח בהצלחה"), backgroundColor: Colors.green));
       _searchPatient();
 
     } catch (e) {
@@ -314,7 +314,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: const Text('הוספת פריט למטופל'),
+          title: const Text('הוספת פריט לקוח'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -363,7 +363,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                       controller: _tzController,
                       keyboardType: TextInputType.text, 
                       decoration: const InputDecoration(
-                        labelText: 'הכנס מספר מטופל', 
+                        labelText: 'הכנס מספר לקוח', 
                         prefixIcon: Icon(Icons.person_search),
                         border: OutlineInputBorder(),
                       ),
@@ -376,7 +376,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                     icon: _isSearching 
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
                         : const Icon(Icons.search),
-                    label: const Text('חפש מטופל'),
+                    label: const Text('חפש לקוח'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
                       backgroundColor: const Color(0xFF004D40),
@@ -390,7 +390,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
 
             Expanded(
               child: !_hasSearched 
-                  ? Center(child: Text("נא לחפש מטופל כדי לראות ציוד", style: TextStyle(color: Colors.grey[500], fontSize: 18)))
+                  ? Center(child: Text("נא לחפש לקוח כדי לראות ציוד", style: TextStyle(color: Colors.grey[500], fontSize: 18)))
                   : _patientItems.isEmpty
                     ? Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -398,14 +398,14 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                           const Icon(Icons.inventory_2_outlined, size: 60, color: Colors.grey),
                           const SizedBox(height: 10),
                           Text(
-                            "אין ציוד משויך למטופל זה (${_currentPatientTZRaw ?? ''})",
+                            "אין ציוד משויך לקוח זה (${_currentPatientTZRaw ?? ''})",
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
                           ),
                           const SizedBox(height: 20),
                           ElevatedButton.icon(
                             onPressed: _showAddItemDialog,
                             icon: const Icon(Icons.add),
-                            label: const Text('הוסף פריט למטופל זה'),
+                            label: const Text('הוסף פריט לקוח זה'),
                             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                           )
                         ],
@@ -425,7 +425,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    SelectableText("מטופל: ${_currentPatientTZRaw}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                    SelectableText("לקוח: ${_currentPatientTZRaw}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 5),
                                     SelectableText(
                                       "שווי ציוד כולל: ₪${_totalCost.toStringAsFixed(2)}", 
@@ -478,7 +478,7 @@ class _PatientsManagementScreenState extends State<PatientsManagementScreen> {
                                         SelectableText("ID: ${item['ID']}"), 
                                         SelectableText("עלות: $cost"), 
                                         SelectableText("נלקח בתאריך: ${takenTs != null ? takenTs.toDate().toString().substring(0, 10) : '---'}"),
-                                        SelectableText("נמצא אצל המטופל: $daysHeld ימים", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                                        SelectableText("נמצא אצל לקוח: $daysHeld ימים", style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                                       ],
                                     ),
                                     trailing: ElevatedButton.icon(

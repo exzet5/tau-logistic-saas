@@ -6,7 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:universal_html/html.dart' as html;
 
 /// Service responsible for generating and downloading PDF documents 
-/// (Barcodes and Patient Deposit Forms).
+/// (Barcodes and Deposit Forms).
 class PdfService {
   
   /// Generates a PDF containing Code128 barcodes for the provided items.
@@ -71,8 +71,9 @@ class PdfService {
   }
 
   /// Generates a formal PDF document detailing borrowed equipment 
-  /// and the required deposit for the patient to sign.
+  /// and the required deposit for the customer to sign.
   static Future<void> generateDepositFormPdf({
+    required String companyName,
     required String patientId, 
     required List<Map<String, String>> formattedItems, 
     required double totalCost, 
@@ -94,7 +95,7 @@ class PdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Center(
-                child: pw.Text('בית חולים שיקומי רעות', style: pw.TextStyle(font: fontBold, fontSize: 20, color: PdfColors.teal)),
+                child: pw.Text(companyName, style: pw.TextStyle(font: fontBold, fontSize: 20, color: PdfColors.teal)),
               ),
               pw.SizedBox(height: 10),
               pw.Center(
@@ -105,7 +106,7 @@ class PdfService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('תאריך: ${DateFormat('dd/MM/yyyy').format(DateTime.now())}'),
-                  pw.Text('מספר מטופל: $patientId', style: pw.TextStyle(font: fontBold, fontSize: 16)),
+                  pw.Text('מזהה לקוח: $patientId', style: pw.TextStyle(font: fontBold, fontSize: 16)),
                 ]
               ),
               pw.SizedBox(height: 10),
@@ -113,7 +114,7 @@ class PdfService {
               pw.SizedBox(height: 15),
               pw.Divider(),
               pw.SizedBox(height: 15),
-              pw.Text('אני החתום/ה מטה מאשר/ת בזאת כי קיבלתי לידי את הציוד הרפואי המפורט מטה, המהווה רכוש של בית החולים רעות.'),
+              pw.Text('אני החתום/ה מטה מאשר/ת בזאת כי קיבלתי לידי את הציוד המפורט מטה, המהווה רכוש של $companyName.'),
               pw.SizedBox(height: 20),
               pw.Text('פירוט הציוד שהועבר לידיי:', style: pw.TextStyle(font: fontBold, decoration: pw.TextDecoration.underline)),
               pw.SizedBox(height: 10),
@@ -138,13 +139,13 @@ class PdfService {
               pw.SizedBox(height: 20),
               pw.Text('תנאי ההשאלה והפיקדון:', style: pw.TextStyle(font: fontBold, fontSize: 16)),
               pw.SizedBox(height: 10),
-              pw.Text('1. הציוד נמסר לי כהשאלה לתקופת הטיפול בלבד.'),
+              pw.Text('1. הציוד נמסר בהשאלה לתקופת השימוש בלבד.'),
               pw.SizedBox(height: 5),
-              pw.Text('2. אני מתחייב/ת לשמור על הציוד במצב תקין ולהחזירו לבית החולים עם סיום השימוש בו.'),
+              pw.Text('2. הנני מתחייב/ת לשמור על הציוד במצב תקין ולהחזירו ל-$companyName עם סיום השימוש.'),
               pw.SizedBox(height: 5),
-              pw.Text('3. ידוע לי כי דמי הפיקדון יוחזרו אליי במלואם רק עם החזרת הציוד בשלמותו.'),
+              pw.Text('3. ידוע לי כי דמי הפיקדון יוחזרו במלואם רק עם החזרת הציוד בשלמותו.'),
               pw.SizedBox(height: 5),
-              pw.Text('4. במקרה של אובדן או נזק משמעותי לציוד, בית החולים רשאי לחלט את הפיקדון.'),
+              pw.Text('4. במקרה של אובדן או נזק משמעותי, החברה רשאית לחלט את הפיקדון.'),
               pw.Spacer(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -154,7 +155,7 @@ class PdfService {
                     children: [
                       pw.Text('_______________________'),
                       pw.SizedBox(height: 5),
-                      pw.Text('חתימת המטופל', style: pw.TextStyle(font: fontBold)),
+                      pw.Text('חתימת לקוח', style: pw.TextStyle(font: fontBold)),
                     ]
                   ),
                   pw.Column(
@@ -162,7 +163,7 @@ class PdfService {
                     children: [
                       pw.Text('_______________________'),
                       pw.SizedBox(height: 5),
-                      pw.Text('חתימת בית חולים', style: pw.TextStyle(font: fontBold)), 
+                      pw.Text('חתימת החברה', style: pw.TextStyle(font: fontBold)), 
                     ]
                   )
                 ]
@@ -174,10 +175,9 @@ class PdfService {
       ),
     );
 
-    await _downloadOrSharePdf(pdf, 'Tofes_Pikadon.pdf');
+    await _downloadOrSharePdf(pdf, 'Deposit_Form_$patientId.pdf');
   }
 
-  /// Internal helper to handle PDF downloading (Web) or Sharing (Mobile).
   static Future<void> _downloadOrSharePdf(pw.Document pdf, String fileName) async {
     final bytes = await pdf.save();
     if (kIsWeb) {

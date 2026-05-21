@@ -14,9 +14,9 @@ This application is designed for a hospital to track the assignment and return o
 ## Features
 
 *   **Firebase Integration:** The app is connected to a Firebase project, allowing for real-time data synchronization.
-*   **Barcode Scanning:** The app uses the device's camera to scan barcodes, making it easy to identify equipment and patients.
+*   **Barcode Scanning:** The app uses the device's camera to scan barcodes, making it easy to identify equipment and customers.
 *   **Equipment Tracking:** The app tracks the status of each piece of equipment, including whether it is available or in use.
-*   **Patient Assignment:** The app assigns equipment to patients, creating a record of who is using which item.
+*   **Customer Assignment:** The app assigns equipment to customers, creating a record of who is using which item.
 
 ## Current Plan
 

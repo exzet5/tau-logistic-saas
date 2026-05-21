@@ -247,7 +247,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         flex: 3, 
                         child: TextField(
                           controller: _searchController, 
-                          decoration: const InputDecoration(labelText: 'חיפוש (שם, ID, עובד, מטופל)', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true), 
+                          decoration: const InputDecoration(labelText: 'חיפוש (שם, ID, עובד, לקוח)', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), isDense: true), 
                           onChanged: (val) => setState(() => _searchQuery = val.trim().toLowerCase())
                         )
                       ),
@@ -328,7 +328,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   Expanded(flex: 3, child: Text('פריט (שם + מזהה)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                   Expanded(flex: 2, child: Text('פעולה', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                   Expanded(flex: 3, child: Text('איש צוות', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                  Expanded(flex: 2, child: Text('מספר מטופל', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                  Expanded(flex: 2, child: Text('מספר לקוח', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
                 ],
               ),
             ),

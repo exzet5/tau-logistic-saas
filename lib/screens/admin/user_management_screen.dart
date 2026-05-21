@@ -31,7 +31,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> with Single
   // --- AVAILABLE TABS CONFIGURATION ---
   final Map<String, String> _availableTabs = {
     'dashboard': 'ראשי',
-    'patients': 'מטופלים',
+    'patients': 'לקוחות',
     'items': 'ציוד',
     'pikadon': 'פיקדונות',
     'history': 'היסטוריה',

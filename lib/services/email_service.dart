@@ -1,19 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-/// Service responsible for sending automated emails via Google Apps Script Web App API.
-/// Replaces the legacy EmailJS implementation to bypass CORS issues on Flutter Web 
-/// and to support higher daily email volumes natively via Gmail.
 class EmailService {
-  // --- GOOGLE APPS SCRIPT CONFIGURATION ---
-  // The endpoint URL of the deployed Google Apps Script Web App.
   static const String _scriptUrl = 'https://script.google.com/macros/s/AKfycbzls4Kmo73P0KkD2GYwWDqu_Y-UciOPFDt5TZwEbSBVs_n4URc9K-XtsfSZqiOOoH1B/exec';
   
-  // App links for welcome emails
   static const String _apkLink = 'https://drive.google.com/file/d/1XCR9isYBETkrs96psayggfeUrZ5-pTaC/view?usp=sharing';
   static const String _webLink = 'https://tau-logistic-app.web.app/';
 
-  /// Sends an HTML email containing the verification code (OTP) to the user.
   static Future<void> sendVerificationCode({
     required String name,
     required String email,
@@ -22,7 +15,6 @@ class EmailService {
   }) async {
     final url = Uri.parse(_scriptUrl);
 
-    // Build stylish HTML layout for OTP Verification with TAU Logistic branding
     final String htmlContent = '''
       <div dir="rtl" style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; text-align: right;">
         <div style="background-color: #004D40; color: white; padding: 20px; text-align: center;">
@@ -48,7 +40,6 @@ class EmailService {
       </div>
     ''';
 
-    // Use text/plain to avoid pre-flight OPTIONS requests (CORS fix for Flutter Web)
     final response = await http.post(
       url,
       headers: {'Content-Type': 'text/plain'},
@@ -60,17 +51,22 @@ class EmailService {
       }),
     );
 
-    if (response.statusCode != 200) {
-      throw 'Server connection failed: ${response.statusCode}';
+
+    if (response.statusCode == 302 || response.statusCode == 200) {
+      if (response.statusCode == 200 && response.body.isNotEmpty) {
+        try {
+          final result = json.decode(response.body);
+          if (result['status'] == 'error') throw 'Google Script Error: ${result['message']}';
+        } catch (e) {
+        
+        }
+      }
+      return; 
     }
 
-    final result = json.decode(response.body);
-    if (result['status'] == 'error') {
-      throw 'Google Script Error: ${result['message']}';
-    }
+    throw 'Server connection failed: ${response.statusCode}';
   }
 
-  /// Sends an HTML welcome email to a newly registered user containing platform links and detailed installation steps.
   static Future<void> sendWelcomeEmail({
     required String name,
     required String email,
@@ -78,7 +74,6 @@ class EmailService {
   }) async {
     final url = Uri.parse(_scriptUrl);
 
-    // Build robust, stylish HTML structure for the SaaS welcome email
     final String htmlContent = '''
       <div dir="rtl" style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; text-align: right;">
         <div style="background-color: #004D40; color: white; padding: 20px; text-align: center;">
@@ -87,7 +82,6 @@ class EmailService {
         <div style="padding: 30px; background-color: #f9fdfc;">
           <p style="font-size: 16px;">שלום <b>$name</b>,</p>
           <p style="font-size: 16px;">אנו שמחים לבשר שהוגדרת בהצלחה במערכת ניהול המלאי שלנו. כעת תוכל לנהל ולעקוב אחר פריטים ולקוחות ביעילות באמצעות טכנולוגיית ברקוד.</p>
-          
           <div style="background-color: #e0f2f1; padding: 15px; border-radius: 8px; margin: 20px 0; border-right: 4px solid #004D40;">
             <p style="margin-top: 0; font-weight: bold; color: #004D40;">פרטי הגישה שלך:</p>
             <ul style="margin-bottom: 0; padding-right: 20px;">
@@ -95,10 +89,7 @@ class EmailService {
               <li><b>רמת הרשאה:</b> $role</li>
             </ul>
           </div>
-
           <h3 style="color: #00796B; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px;">איך מתחילים?</h3>
-          <p>כדי שיהיה לך נוח להשתמש במערכת לסריקת ברקודים וניהול שוטף, בחר את הדרך המתאימה לך:</p>
-          
           <div style="margin: 20px 0; padding: 15px; background-color: white; border: 1px solid #eee; border-radius: 8px;">
             <b style="color: #333; font-size: 15px;">🍏 למשתמשי iPhone (iOS) - התקנה מהירה:</b><br/>
             1. פתח את הדפדפן Safari.<br/>
@@ -106,7 +97,6 @@ class EmailService {
             3. לחץ על כפתור <b>'שיתוף'</b> (ריבוע עם חץ) בתחתית המסך.<br/>
             4. בחר <b>'הוסף למסך הבית'</b> (Add to Home Screen).
           </div>
-
           <div style="margin: 20px 0; padding: 15px; background-color: white; border: 1px solid #eee; border-radius: 8px;">
             <b style="color: #333; font-size: 15px;">🤖 למשתמשי Android - התקנת אפליקציה:</b><br/>
             <div style="margin-top: 10px; line-height: 1.8;">
@@ -116,13 +106,11 @@ class EmailService {
               4. <b>Play Protect:</b> אם קופצת אזהרת אבטחה של גוגל, לחץ על 'פרטים נוספים' (More details) ואז בחר ב-'התקן בכל זאת' (Install anyway).
             </div>
           </div>
-          
           <div style="margin: 20px 0; padding: 15px; background-color: white; border: 1px solid #eee; border-radius: 8px;">
             <b style="color: #333; font-size: 15px;">💻 כניסה מהמחשב (למנהלים):</b><br/>
             להפקת דוחות והוספת משתמשים, מומלץ להיכנס לממשק דרך הדפדפן במחשב: <br/>
             <a href="$_webLink" style="color: #00796B; font-weight: bold;">$_webLink</a>
           </div>
-
           <div style="text-align: center; margin-top: 35px;">
             <a href="$_webLink" style="background-color: #00796B; color: white; padding: 14px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; font-size: 16px;">היכנס למערכת עכשיו</a>
           </div>
@@ -134,7 +122,6 @@ class EmailService {
       </div>
     ''';
 
-    // Send request using text/plain to bypass browser CORS policies
     final response = await http.post(
       url,
       headers: {'Content-Type': 'text/plain'},
@@ -146,13 +133,19 @@ class EmailService {
       }),
     );
 
-    if (response.statusCode != 200) {
-      throw 'Server connection failed: ${response.statusCode}';
+
+    if (response.statusCode == 302 || response.statusCode == 200) {
+      if (response.statusCode == 200 && response.body.isNotEmpty) {
+        try {
+          final result = json.decode(response.body);
+          if (result['status'] == 'error') throw 'Google Script Error: ${result['message']}';
+        } catch (e) {
+          
+        }
+      }
+      return; 
     }
 
-    final result = json.decode(response.body);
-    if (result['status'] == 'error') {
-      throw 'Google Script Error: ${result['message']}';
-    }
+    throw 'Server connection failed: ${response.statusCode}';
   }
 }

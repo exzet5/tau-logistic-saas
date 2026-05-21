@@ -38,7 +38,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
   bool _isProcessing = false;
   bool _isLoadingData = true;
-  
+  String? _companyName;
   Map<String, String> _usersCache = {};
   Map<String, String> _groupNamesCache = {}; 
 
@@ -62,6 +62,12 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
 
   Future<void> _loadAuxiliaryData() async {
     try {
+      // Fetch company name
+      var companyDoc = await _companyRef.get();
+      if (companyDoc.exists) {
+        _companyName = companyDoc.get('name') ?? 'שם החברה';
+      }
+
       var usersSnap = await FirebaseFirestore.instance
           .collection('users')
           .where('company_id', isEqualTo: widget.companyId)
@@ -390,7 +396,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                     
                     bool isStillWithPatient = itemPatientMap[itemId] == encryptedPatientId;
                     
-                    String statusText = isStillWithPatient ? " (עדיין אצל המטופל)" : " (הוחזר למלאי)";
+                    String statusText = isStillWithPatient ? " (עדיין אצל לקוח)" : " (הוחזר למלאי)";
                     Color statusColor = isStillWithPatient ? Colors.orange.shade800 : Colors.green.shade800;
 
                     return CheckboxListTile(
@@ -527,7 +533,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
           textDirection: TextDirection.rtl,
           child: AlertDialog(
             title: const Text('שארית הפיקדון'),
-            content: Text('האם הפיקדון עבור שאר הפריטים שלא חולטו (${remainingItems.length} פריטים) הוחזר למטופל במלואו?'),
+            content: Text('האם הפיקדון עבור שאר הפריטים שלא חולטו (${remainingItems.length} פריטים) הוחזר לקוח במלואו?'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('לא, השאר ב"פעילים"')),
               ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.teal), onPressed: () => Navigator.pop(ctx, true), child: const Text('כן, הוחזר')),
@@ -624,7 +630,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         'סכום ב-₪ (Total Cost)', 
         'אמצעי תשלום', 
         'פריטים (Items)',
-        'מטופל (Patient ID)',
+        'לקוח (Customer ID)',
         'תאריך לקיחה (Date)'
       ];
 
@@ -681,7 +687,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
         'אמצעי תשלום', 
         'פעולה (Action)',
         'פריטים (Items)',
-        'מטופל (Patient ID)',
+        'לקוח (Customer ID)',
         'תאריך ושעה (Date)'       
       ];
 
@@ -746,6 +752,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
       }).toList();
 
       await PdfService.generateDepositFormPdf(
+        companyName: _companyName ?? 'שם החברה', // Pass the loaded company name
         patientId: patientId, 
         formattedItems: formattedItems, 
         totalCost: totalCost, 
@@ -875,7 +882,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      SelectableText("מטופל: $patientId", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                      SelectableText("לקוח: $patientId", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                                       SelectableText(timeStr, style: const TextStyle(color: Colors.grey)),
                                     ],
                                   ),
@@ -1116,7 +1123,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          SelectableText("מטופל: $patientId", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                          SelectableText("לקוח: $patientId", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                           SelectableText("תאריך לקיחה: $timeStr", style: const TextStyle(color: Colors.grey)),
                                         ],
                                       ),
@@ -1345,7 +1352,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  SelectableText("מטופל: $patientId", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  SelectableText("לקוח: $patientId", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                   SelectableText("פריטים: ${items.map((i) {
                                     String grp = _getReadableGroupName(i['group'] ?? ''); 
                                     return "${i['itemName'] ?? 'לא ידוע'} [קבוצה: $grp] (ID: ${i['itemId']})";
@@ -1420,7 +1427,7 @@ class _PikadonScreenState extends State<PikadonScreen> with SingleTickerProvider
                 child: TextField(
                   controller: controller,
                   decoration: const InputDecoration(
-                    labelText: 'חפש מספר מטופל',
+                    labelText: 'חפש מספר לקוח',
                     prefixIcon: Icon(Icons.search),
                     border: OutlineInputBorder(),
                     isDense: true,

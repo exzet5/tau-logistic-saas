@@ -208,13 +208,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
             return Directionality(
               textDirection: TextDirection.rtl,
               child: AlertDialog(
-                title: const Text('אישור שיוך למטופל'),
+                title: const Text('אישור שיוך ללקוחל'),
                 content: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                       Text('המטופל (ID): $patientId', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
+                       Text('לקוח (ID): $patientId', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
                        const SizedBox(height: 10),
                        const Text('הפריטים לשיוך:'),
                        const Divider(),
@@ -539,8 +539,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
   void _showManualEntryDialog() {
     _manualInputController.clear();
     
-    String dialogTitle = _isScanningPatient ? 'הכנס מספר מטופל' : 'הכנס קוד פריט';
-    String hintText = _isScanningPatient ? 'מספר מטופל (לדוגמה: 123456789)' : 'סרוק קוד (לדוגמה: 88000013)';
+    String dialogTitle = _isScanningPatient ? 'הכנס מספר לקוח' : 'הכנס קוד פריט';
+    String hintText = _isScanningPatient ? 'מספר לקוח (לדוגמה: 123456789)' : 'סרוק קוד (לדוגמה: 88000013)';
 
     showDialog(
       context: context,
@@ -600,7 +600,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       headerColor = Colors.orange[800]!; 
     }
 
-    String fabLabel = _isScanningPatient ? 'הכנס מספר מטופל' : 'הכנס קוד ידנית';
+    String fabLabel = _isScanningPatient ? 'הכנס מספר לקוח' : 'הכנס קוד ידנית';
 
     return Scaffold(
       appBar: AppBar(
@@ -722,7 +722,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Widget _buildInstructionArea() {
     String text = '';
     if (widget.mode == 'take') {
-      text = _isScanningPatient ? 'נא לסרוק מספר מטופל' : 'נא לסרוק ברקוד פריט';
+      text = _isScanningPatient ? 'נא לסרוק מספר לקוח' : 'נא לסרוק ברקוד פריט';
     } else {
       text = 'נא לסרוק פריט להחזרה';
     }
@@ -821,7 +821,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.person),
-                      label: const Text('סרוק מטופל\n(סיום)', textAlign: TextAlign.center),
+                      label: const Text('סרוק לקוח\n(סיום)', textAlign: TextAlign.center),
                       onPressed: _goToPatientScan,
                     ),
                   ),
@@ -877,7 +877,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
               Text('ID: $id', style: const TextStyle(fontSize: 16, color: Colors.grey), textAlign: TextAlign.center),
 
               const SizedBox(height: 20),
-              const Text('נמצא כרגע אצל מטופל:', style: TextStyle(fontSize: 18)),
+              const Text('נמצא כרגע אצל לקוח:', style: TextStyle(fontSize: 18)),
               Text(realPid, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue)),
                 
               const SizedBox(height: 30),
@@ -1021,7 +1021,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
           Text("קבוצה: $_errorItemGroup", style: TextStyle(color: Colors.grey[700], fontSize: 16)),
         Text(_errorItemName ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
         const SizedBox(height: 10),
-        const Text('כבר משויך למטופל:', style: TextStyle(fontSize: 18)),
+        const Text('כבר משויך לקוח:', style: TextStyle(fontSize: 18)),
         Text(_errorPatientId ?? '', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.red)),
       ]),
     );

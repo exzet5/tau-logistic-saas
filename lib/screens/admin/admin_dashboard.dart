@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'items_management_screen.dart';
 import 'dashboard_screen.dart';
 import 'user_management_screen.dart';
-import 'patients_screen.dart';
+import 'customers_screen.dart';
 import '../../utils/helpers.dart';
 import 'pikadon_screen.dart'; 
 import 'history_screen.dart';
@@ -50,7 +50,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _allAvailableTabs = [
       TabDefinition(key: 'dashboard', label: 'ראשי', icon: const Icon(Icons.dashboard), page: DashboardScreen(companyId: widget.companyId)),
       TabDefinition(key: 'users', label: 'משתמשים', icon: const Icon(Icons.people), page: UserManagementScreen(companyId: widget.companyId)),
-      TabDefinition(key: 'patients', label: 'מטופלים', icon: const Icon(Icons.sick), page: PatientsManagementScreen(companyId: widget.companyId)),
+      TabDefinition(key: 'patients', label: 'לקוחות', icon: const Icon(Icons.sick), page: PatientsManagementScreen(companyId: widget.companyId)),
       TabDefinition(key: 'items', label: 'ציוד', icon: const Icon(Icons.inventory), page: ItemsManagementScreen(companyId: widget.companyId)),
       TabDefinition(key: 'pikadon', label: 'פיקדונות', icon: _buildPikadonIcon(), page: PikadonScreen(companyId: widget.companyId)),
       TabDefinition(key: 'history', label: 'היסטוריה', icon: const Icon(Icons.history), page: HistoryScreen(companyId: widget.companyId)),

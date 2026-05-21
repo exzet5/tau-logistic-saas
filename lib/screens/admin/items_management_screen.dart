@@ -183,7 +183,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                 ),
                 if (currentStatus == 'in_use' || currentStatus == 'taken') ...[
                   const SizedBox(height: 15),
-                  const Text("שים לב: הפריט משוייך למטופל. המחיקה תנתק את השיוך.", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                  const Text("שים לב: הפריט משוייך לקוח. המחיקה תנתק את השיוך.", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
                 ]
               ],
             ),
@@ -624,7 +624,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             textDirection: TextDirection.rtl, 
             child: AlertDialog(
               title: const Text("לא ניתן למחוק!", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-              content: Text("ישנם ${inUseList.length} פריטים מקבוצה/מק\"ט זה שנמצאים כרגע אצל מטופלים.\nאנא שחרר אותם (החזר למלאי) לפני המחיקה."),
+              content: Text("ישנם ${inUseList.length} פריטים מקבוצה/מק\"ט זה שנמצאים כרגע אצל לקוח.\nאנא שחרר אותם (החזר למלאי) לפני המחיקה."),
               actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("אישור"))],
             )
           )
@@ -1159,7 +1159,7 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                                     const Expanded(flex: 2, child: Text('מק"ט', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), 
                                     const Expanded(flex: 1, child: Text('ID', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), 
                                     const Expanded(flex: 1, child: Text('סטטוס', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), 
-                                    const Expanded(flex: 2, child: Text('מספר מטופל', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), 
+                                    const Expanded(flex: 2, child: Text('מספר לקוח', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))), 
                                     const SizedBox(width: 120, child: Text('פעולות', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)))
                                   ]
                                 )
