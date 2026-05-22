@@ -52,11 +52,14 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
   // --- BARCODE PRINTING MODE ---
   bool _isBarcodeMode = false;
   Map<String, Map<String, String>> _selectedBarcodes = {};
+  double barcodeLabelWidthMm = 40;
+  double barcodeLabelHeightMm = 30;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _loadBarcodePrintSettings();
   }
 
   @override
@@ -66,6 +69,122 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     _manualQuantityController.dispose();
     _costController.dispose();
     super.dispose();
+  }
+
+  // NEW: Helper getter for the current company document reference
+  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
+
+  Future<void> _loadBarcodePrintSettings() async {
+    try {
+      // ИСПРАВЛЕНО: Теперь настройки грузятся для конкретной фирмы
+      final doc = await _companyRef
+          .collection('system')
+          .doc('barcodePrintSettings')
+          .get();
+      if (!doc.exists) return;
+
+      final data = doc.data() as Map<String, dynamic>;
+      if (mounted) {
+        setState(() {
+          barcodeLabelWidthMm = data['widthMm'] is num
+              ? (data['widthMm'] as num).toDouble()
+              : 40;
+          barcodeLabelHeightMm = data['heightMm'] is num
+              ? (data['heightMm'] as num).toDouble()
+              : 30;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading barcode print settings: $e');
+    }
+  }
+
+  Future<void> _showBarcodePrintSettingsDialog() async {
+    final widthCtrl = TextEditingController(text: barcodeLabelWidthMm.toStringAsFixed(0));
+    final heightCtrl = TextEditingController(text: barcodeLabelHeightMm.toStringAsFixed(0));
+
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('הגדרות גודל מדבקה (מ"מ)'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: widthCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'רוחב (Width)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: heightCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'גובה (Height)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('ביטול'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('שמור'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (save != true) return;
+
+    final parsedWidth = double.tryParse(widthCtrl.text.trim());
+    final parsedHeight = double.tryParse(heightCtrl.text.trim());
+
+    if (parsedWidth == null || parsedHeight == null || parsedWidth <= 0 || parsedHeight <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('נא להזין ערכים תקינים')),
+        );
+      }
+      return;
+    }
+
+    _showLoadingDialog();
+    try {
+      // ИСПРАВЛЕНО: Теперь настройки сохраняются в конкретную фирму
+      await _companyRef
+          .collection('system')
+          .doc('barcodePrintSettings')
+          .set({
+        'widthMm': parsedWidth,
+        'heightMm': parsedHeight,
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        setState(() {
+          barcodeLabelWidthMm = parsedWidth;
+          barcodeLabelHeightMm = parsedHeight;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('שגיאה בשמירת הגדרות: $e')),
+        );
+      }
+    } finally {
+      _hideLoadingDialog();
+    }
   }
 
   // --- HELPERS ---
@@ -108,13 +227,9 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     return docId;
   }
 
-
-
-
   /// Fetches the cost associated with a specific SKU to pre-fill the cost input field.
   Future<void> _fetchCostForSku(String skuId) async {
     try {
-      // NEW: Use _companyRef
       var snap = await _companyRef.collection('items').where('SKU_ID', isEqualTo: skuId).get();
       for (var doc in snap.docs) {
         var data = doc.data() as Map<String, dynamic>;
@@ -134,25 +249,26 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     }
   }
 
-
-
   /// Delegates the generation and downloading of the Barcodes PDF to PdfService.
   Future<void> _generateBarcodesPdfFromList(List<Map<String, String>> itemsToPrint, String fileNameLabel) async {
     _showLoadingDialog();
     try {
-      await PdfService.generateBarcodesPdf(items: itemsToPrint, fileNameLabel: fileNameLabel);
+      await PdfService.generateBarcodesPdf(
+        items: itemsToPrint,
+        fileNameLabel: fileNameLabel,
+        labelWidthMm: barcodeLabelWidthMm,
+        labelHeightMm: barcodeLabelHeightMm,
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאה ביצירת PDF: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('שגיאת יצירת PDF: $e')));
     } finally {
       _hideLoadingDialog();
     }
   }
 
-  // NEW: Helper getter for the current company document reference
-  DocumentReference get _companyRef => FirebaseFirestore.instance.collection('companies').doc(widget.companyId);
-
   Stream<QuerySnapshot> _getGroupsStream() => _companyRef.collection('items_groups').snapshots();
   Stream<QuerySnapshot> _getSkusStream(String groupId) => _companyRef.collection('SKU').where('GroupID', isEqualTo: groupId).snapshots();
+
   /// Marks a specific item as deleted (assigning a loss reason) and updates the History log.
   Future<void> _deleteItem(String docId, String itemName, String currentStatus, String itemId) async {
     String selectedReason = 'broken'; 
@@ -203,14 +319,12 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     if (confirm == true) {
       String? uid = FirebaseAuth.instance.currentUser?.uid;
       
-      // NEW: Use _companyRef
       await _companyRef.collection('items').doc(docId).update({
         'status': selectedReason, 
         'dateDeleted': FieldValue.serverTimestamp(),
         'patientId': null, 
       });
 
-      // NEW: Use _companyRef
       await _companyRef.collection('History').add({
         'action': selectedReason,
         'itemId': itemId,
@@ -293,7 +407,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       Map<String, dynamic> updates = {};
                       
                       if (idCtrl.text.trim() != data['ID']) {
-                        // NEW: Use _companyRef
                         final check = await _companyRef.collection('items').where('ID', isEqualTo: idCtrl.text.trim()).get();
                         if (check.docs.isNotEmpty) { 
                           _hideLoadingDialog(); 
@@ -315,7 +428,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       if (newCost != null) {
                         updates['cost'] = newCost; 
                         if (targetSkuId != null && targetSkuId.isNotEmpty) {
-                          // NEW: Use _companyRef
                           var existingItems = await _companyRef.collection('items').where('SKU_ID', isEqualTo: targetSkuId).get();
                           for (var itemDoc in existingItems.docs) {
                             if (itemDoc.id != doc.id) {
@@ -376,7 +488,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             ElevatedButton(
               onPressed: () async {
                 if (ctrl.text.isNotEmpty) {
-                  // NEW: Use _companyRef
                   await _companyRef.collection('items_groups').add({'name': ctrl.text.trim()});
                   if (mounted) Navigator.pop(ctx);
                 }
@@ -410,7 +521,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             ElevatedButton(
               onPressed: () async {
                 if (ctrl.text.isNotEmpty) {
-                  // NEW: Use _companyRef
                   DocumentReference ref = await _companyRef.collection('SKU').add({'name': ctrl.text.trim(), 'GroupID': currentGroupId});
                   if (preselectedGroupId == null) {
                      setState(() { 
@@ -450,7 +560,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
             ElevatedButton(
               onPressed: () async {
                 if (ctrl.text.isNotEmpty) {
-                  // NEW: Use _companyRef
                   await _companyRef.collection(collection).doc(docId).update({'name': ctrl.text.trim()});
                   Navigator.pop(ctx);
                 }
@@ -470,7 +579,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     String currentGroupName = 'טוען...';
     
     try {
-      // NEW: Use _companyRef
       var gDoc = await _companyRef.collection('items_groups').doc(currentGroupId).get();
       if (gDoc.exists) {
         currentGroupName = gDoc.data()?['name'] ?? 'Unknown';
@@ -523,7 +631,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                       _showLoadingDialog();
                       try {
                         WriteBatch batch = FirebaseFirestore.instance.batch();
-                        // NEW: Use _companyRef
                         DocumentReference skuRef = _companyRef.collection('SKU').doc(skuId);
                         Map<String, dynamic> updates = {'name': nameCtrl.text.trim()};
                         
@@ -534,7 +641,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                         batch.update(skuRef, updates);
 
                         if (nameCtrl.text.trim() != currentName || groupChanged) {
-                          // NEW: Use _companyRef
                           var items = await _companyRef.collection('items').where('SKU_ID', isEqualTo: skuId).get();
                           for (var doc in items.docs) {
                             Map<String, dynamic> itemUpdates = {};
@@ -577,7 +683,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
   Future<void> _deleteGroupOrSku(String collection, String docId, String name, {bool isGroup = false}) async {
     _showLoadingDialog();
     try {
-      // NEW: Use _companyRef
       Query query = _companyRef.collection('items');
       if (isGroup) {
         query = query.where('GroupID', isEqualTo: docId);
@@ -594,7 +699,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
       }).toList();
 
       if (isGroup) {
-        // NEW: Use _companyRef
         var skusInGroup = await _companyRef.collection('SKU').where('GroupID', isEqualTo: docId).get();
         if (skusInGroup.docs.isNotEmpty) {
           _hideLoadingDialog();
@@ -678,7 +782,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
           }
         }
         
-        // NEW: Use _companyRef
         batch.delete(_companyRef.collection(collection).doc(docId));
         await batch.commit();
         
@@ -705,7 +808,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
     _showLoadingDialog();
     
     try {
-      // NEW: System settings are now specific to the company
       final systemRef = _companyRef.collection('system').doc('settings');
       List<String> newBarcodes = [];
 
@@ -726,7 +828,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
 
       WriteBatch batch = FirebaseFirestore.instance.batch();
       for (String id in newBarcodes) {
-        // NEW: Use _companyRef
         batch.set(_companyRef.collection('items').doc(), {
           'ID': id, 
           'GroupID': _selectedGroupForAdd!['id'], 
@@ -738,7 +839,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
         });
       }
 
-      // NEW: Use _companyRef
       var existingItems = await _companyRef.collection('items').where('SKU_ID', isEqualTo: _selectedSkuForAdd!['id']).get();
       for (var doc in existingItems.docs) {
         batch.update(doc.reference, {'cost': cost});
@@ -896,7 +996,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
           children: [
             // --- TAB 1: LIST ---
             StreamBuilder<QuerySnapshot>(
-              // NEW: Use _companyRef
               stream: _companyRef.collection('items_groups').snapshots(),
               builder: (context, groupsSnapshot) {
                 Map<String, String> groupNamesMap = {};
@@ -907,7 +1006,6 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                 }
 
                 return StreamBuilder<QuerySnapshot>(
-                  // NEW: Use _companyRef
                   stream: _companyRef.collection('items').snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
@@ -1112,6 +1210,13 @@ class _ItemsManagementScreenState extends State<ItemsManagementScreen> with Sing
                                                       _selectedBarcodes.clear();
                                                     });
                                                   },
+                                                ),
+                                                const SizedBox(width: 8),
+                                                IconButton(
+                                                  icon: const Icon(Icons.settings),
+                                                  color: Colors.blueGrey,
+                                                  onPressed: _showBarcodePrintSettingsDialog,
+                                                  tooltip: 'הגדרות הדפסה',
                                                 ),
                                                 const SizedBox(width: 8),
                                                 OutlinedButton.icon(

@@ -1,73 +1,86 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:universal_html/html.dart' as html;
+import 'package:intl/intl.dart';
 
 /// Service responsible for generating and downloading PDF documents 
 /// (Barcodes and Deposit Forms).
 class PdfService {
   
   /// Generates a PDF containing Code128 barcodes for the provided items.
+  /// Each barcode is printed on a separate label matching the configured dimensions.
   static Future<void> generateBarcodesPdf({
-    required List<Map<String, String>> items, 
-    required String fileNameLabel
+    required List<Map<String, String>> items,
+    required String fileNameLabel,
+    required double labelWidthMm,
+    required double labelHeightMm,
   }) async {
     final pdf = pw.Document();
     final font = await PdfGoogleFonts.rubikRegular();
-      
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) {
-          return [
-            pw.Wrap(
-              spacing: 15, 
-              runSpacing: 15,
-              children: items.map((item) {
-                String code = item['id'] ?? '';
-                String name = item['name'] ?? '';
 
-                return pw.Container(
-                  width: 113.4, 
-                  height: 85.0, 
-                  padding: const pw.EdgeInsets.all(4),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: PdfColors.grey300, width: 0.5)
-                  ),
-                  child: pw.Column(
-                    mainAxisAlignment: pw.MainAxisAlignment.center,
-                    children: [
-                      pw.Text(
-                        name, 
-                        textDirection: pw.TextDirection.rtl, 
-                        style: pw.TextStyle(font: font, fontSize: 8, fontWeight: pw.FontWeight.bold), 
-                        maxLines: 1, 
-                        overflow: pw.TextOverflow.clip
-                      ),
-                      pw.SizedBox(height: 4),
-                      pw.Expanded(
-                        child: pw.BarcodeWidget(
-                          barcode: pw.Barcode.code128(), 
-                          data: code, 
-                          drawText: false
-                        )
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(code, style: const pw.TextStyle(fontSize: 9, letterSpacing: 2)),
-                    ],
-                  ),
-                );
-              }).toList(),
-            )
-          ];
-        },
-      ),
+    final pageFormat = PdfPageFormat(
+      labelWidthMm * PdfPageFormat.mm,
+      labelHeightMm * PdfPageFormat.mm,
+      marginAll: 4 * PdfPageFormat.mm,
     );
 
-    await _downloadOrSharePdf(pdf, 'Barcodes_${fileNameLabel}_${items.length}.pdf');
+    for (final item in items) {
+      final code = item['id'] ?? '';
+      final name = item['name'] ?? '';
+
+      pdf.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          build: (pw.Context context) {
+            return pw.Container(
+              width: double.infinity,
+              height: double.infinity,
+              padding: const pw.EdgeInsets.all(2),
+              child: pw.Column(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    name,
+                    textDirection: pw.TextDirection.rtl,
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      font: font,
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: pw.TextOverflow.clip,
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Expanded(
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.code128(),
+                      data: code,
+                      drawText: false,
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    code,
+                    style: const pw.TextStyle(
+                      fontSize: 9,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    await _downloadOrSharePdf(
+      pdf,
+      'Barcodes_${fileNameLabel}_${items.length}.pdf',
+    );
   }
 
   /// Generates a formal PDF document detailing borrowed equipment 
@@ -79,7 +92,7 @@ class PdfService {
     required double totalCost, 
     required String staffName,
     String? customTitle,
-    String? customTerms, // Changed to a single String
+    String? customTerms, 
   }) async {
     final pdf = pw.Document();
     final font = await PdfGoogleFonts.rubikRegular();
