@@ -90,6 +90,15 @@ class EmailService {
             </ul>
           </div>
           <h3 style="color: #00796B; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px;">איך מתחילים?</h3>
+          
+          <div style="margin: 20px 0; padding: 15px; background-color: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 8px;">
+            <b style="color: #004D40; font-size: 16px;">📚 מדריכי שימוש:</b><br/>
+            <div style="margin-top: 10px; line-height: 1.8;">
+              <a href="https://raw.githubusercontent.com/HiatHasan/tau-logistic-user-guide/main/מדריך_משתמש_מערכת_וובית_ניהול_ציוד.pdf" style="color: #00796B; font-weight: bold; text-decoration: underline;">📥 הורד את המדריך לממשק הוובי (מחשב)</a><br/>
+              <a href="https://raw.githubusercontent.com/HiatHasan/tau-logistic-user-guide/main/מדריך_שימוש_TAU_Logistic%20(1).pdf" style="color: #00796B; font-weight: bold; text-decoration: underline;">📱 הורד את המדריך לאפליקציית המובייל</a>
+            </div>
+          </div>
+
           <div style="margin: 20px 0; padding: 15px; background-color: white; border: 1px solid #eee; border-radius: 8px;">
             <b style="color: #333; font-size: 15px;">🍏 למשתמשי iPhone (iOS) - התקנה מהירה:</b><br/>
             1. פתח את הדפדפן Safari.<br/>

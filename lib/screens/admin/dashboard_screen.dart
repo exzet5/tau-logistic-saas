@@ -5,7 +5,7 @@ import 'package:intl/intl.dart' hide TextDirection;
 import 'dart:math' as math;
 import '../../utils/helpers.dart';
 import '../../services/security_service.dart';
-
+import 'package:url_launcher/url_launcher.dart';
 /// Defines the time range for the statistics chart.
 enum TimeRange { monthly, yearly }
 
@@ -189,16 +189,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildWideProgressBar(available, inUse, totalActive),
               const SizedBox(height: 30),
 
-              // STAT CARDS
-              Wrap(
-                spacing: 15,
-                runSpacing: 15,
-                children: [
-                  _buildStatCard("פעילים במלאי", totalActive.toString(), Icons.inventory, Colors.teal),
-                  _buildStatCard("פנויים לשימוש", available.toString(), Icons.check_circle, Colors.green),
-                  _buildStatCard("בשימוש כרגע", inUse.toString(), Icons.people, Colors.blue),
-                ],
-              ),
+              // STAT CARDS & GUIDES BOX
+              LayoutBuilder(builder: (context, constraints) {
+                // If screen is wide, put them on opposite sides
+                if (constraints.maxWidth > 800) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Right side (Stats)
+                      Wrap(
+                        spacing: 15,
+                        runSpacing: 15,
+                        children: [
+                          _buildStatCard("פעילים במלאי", totalActive.toString(), Icons.inventory, Colors.teal),
+                          _buildStatCard("פנויים לשימוש", available.toString(), Icons.check_circle, Colors.green),
+                          _buildStatCard("בשימוש כרגע", inUse.toString(), Icons.people, Colors.blue),
+                        ],
+                      ),
+                      // Left side (Guides Box)
+                      _buildGuidesBox(),
+                    ],
+                  );
+                } else {
+                  // For mobile/small screens, stack them vertically
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 15,
+                        runSpacing: 15,
+                        children: [
+                          _buildStatCard("פעילים במלאי", totalActive.toString(), Icons.inventory, Colors.teal),
+                          _buildStatCard("פנויים לשימוש", available.toString(), Icons.check_circle, Colors.green),
+                          _buildStatCard("בשימוש כרגע", inUse.toString(), Icons.people, Colors.blue),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _buildGuidesBox(),
+                    ],
+                  );
+                }
+              }),
               const SizedBox(height: 30),
 
               // ALERTS SECTION
@@ -1563,5 +1595,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ));
+  }
+  // --- USER GUIDES BOX ---
+  
+  /// Builds the framed box with user guide download buttons, 
+  /// explicitly enforcing RTL layout for correct Hebrew alignment.
+  // --- USER GUIDES BOX ---
+  
+  /// Builds the framed box with user guide download buttons.
+  /// Wrapped in Directionality to strictly enforce RTL for standard components.
+  Widget _buildGuidesBox() {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: Colors.teal.shade50,
+          border: Border.all(color: Colors.teal, width: 2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.menu_book, color: Colors.teal),
+                SizedBox(width: 8),
+                Text("מדריכי שימוש במערכת", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.teal)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text("הורד את המדריכים המלאים לשימוש במערכת:", style: TextStyle(fontSize: 13, color: Colors.blueGrey)),
+            const SizedBox(height: 15),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal, 
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () => _launchURL('https://raw.githubusercontent.com/HiatHasan/tau-logistic-user-guide/main/מדריך_משתמש_מערכת_וובית_ניהול_ציוד.pdf'),
+                  icon: const Icon(Icons.computer, size: 18),
+                  label: const Text("מדריך למחשב", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade800, 
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                  onPressed: () => _launchURL('https://raw.githubusercontent.com/HiatHasan/tau-logistic-user-guide/main/מדריך_שימוש_TAU_Logistic%20(1).pdf'),
+                  icon: const Icon(Icons.smartphone, size: 18),
+                  label: const Text("מדריך לאפליקציה", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Helper to launch URLs
+  Future<void> _launchURL(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      debugPrint('Could not launch $url');
+    }
   }
 }
